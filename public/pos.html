@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>الكاشير | نظام البيع</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <style>
+    body { overflow: hidden; }
+    .pos-topbar {
+      height: 50px; background: #1e293b;
+      display: flex; align-items: center;
+      padding: 0 14px; gap: 10px; flex-shrink: 0;
+    }
+    .pos-topbar .shop-name { color: #fff; font-weight: 700; font-size: 15px; flex: 1; }
+    .pos-topbar a {
+      color: #94a3b8; text-decoration: none;
+      padding: 6px 12px; border-radius: 8px;
+      font-size: 12.5px; font-weight: 600;
+      transition: all .2s;
+    }
+    .pos-topbar a:hover { background: rgba(255,255,255,.1); color: #fff; }
+    .pos-topbar .logout-btn {
+      color: #f87171; cursor: pointer;
+      padding: 6px 12px; border-radius: 8px;
+      font-size: 12.5px; font-weight: 600;
+      transition: all .2s; background: none; border: none;
+      font-family: 'Cairo', sans-serif;
+    }
+    .pos-topbar .logout-btn:hover { background: rgba(248,113,113,.15); }
+
+    .pos-wrapper { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+    /* Receipt hidden element for printing */
+    #receipt {
+      position: fixed;
+      top: 0;
+      left: -99999px;
+      width: 72mm;
+      background: #fff;
+      color: #111827;
+      padding: 0;
+      z-index: -1;
+    }
+
+    /* Payment modal big number */
+    .big-total {
+      font-size: 40px; font-weight: 800;
+      text-align: center; color: var(--primary);
+      padding: 10px 0; direction: ltr;
+    }
+    .numpad {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 8px; margin-top: 10px;
+    }
+    .num-btn {
+      padding: 14px; border-radius: 10px;
+      border: 1.5px solid #e2e8f0; background: #f8fafc;
+      font-size: 18px; font-weight: 700;
+      cursor: pointer; transition: all .15s;
+      font-family: 'Cairo', sans-serif;
+    }
+    .num-btn:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .num-btn.del-btn { background: #fee2e2; color: var(--danger); border-color: #fecaca; }
+    .num-btn.clear-btn { background: #fef3c7; color: var(--warning); border-color: #fde68a; }
+
+    .change-display {
+      background: #f0fdf4; border: 2px solid #86efac;
+      border-radius: 10px; padding: 10px 14px;
+      display: flex; justify-content: space-between;
+      align-items: center; margin-top: 10px;
+    }
+    .change-display .change-label { font-weight: 600; color: #15803d; }
+    .change-display .change-val { font-size: 22px; font-weight: 800; color: #15803d; direction: ltr; }
+
+    .payment-shortcuts {
+      display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px;
+    }
+    .shortcut-btn {
+      flex: 1; min-width: 80px;
+      padding: 8px; border-radius: 8px;
+      border: 1.5px solid #e2e8f0; background: #f8fafc;
+      font-family: 'Cairo', sans-serif; font-size: 13px; font-weight: 700;
+      cursor: pointer; text-align: center; transition: all .15s;
+    }
+    .shortcut-btn:hover { border-color: var(--primary); color: var(--primary); background: #eff6ff; }
+
+    .discount-row {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+    }
+  </style>
+</head>
+<body>
+<div id="app" v-cloak>
+  <!-- Top bar -->
+  <div class="pos-topbar">
+    <span class="shop-name">🛒 {{ settings.shop_name || 'نظام الكاشير' }}</span>
+    <a href="/products">📦 المنتجات</a>
+    <a href="/low-stock">🚨 قرب النفاد</a>
+    <a href="/invoices">🧾 الفواتير</a>
+    <a href="/warehouses">🏬 المخازن</a>
+    <a href="/settings">⚙️ الإعدادات</a>
+    <button class="logout-btn" @click="doLogout">خروج 🚪</button>
+  </div>
+
+  <div class="pos-layout" style="flex:1;overflow:hidden;">
+
+    <!-- ===== Products Panel ===== -->
+    <div class="pos-products">
+      <div class="pos-search-bar">
+        <input
+          type="text"
+          class="search-input"
+          placeholder="🔍  ابحث باسم المنتج أو امسح الباركود..."
+          v-model="searchQuery"
+          ref="searchInput"
+          @keyup.enter="handleSearchEnter"
+          autocomplete="off"
+          id="mainSearch"
+        />
+        <button class="btn btn-outline btn-sm" @click="clearSearch" v-if="searchQuery" title="مسح">✕</button>
+        <button class="btn btn-outline btn-sm" @click="reloadProducts" title="تحديث">🔄</button>
+      </div>
+
+      <!-- Stats bar -->
+      <div style="display:flex;gap:10px;align-items:center;">
+        <span style="font-size:12.5px;color:#64748b;">{{ filteredProducts.length }} منتج</span>
+        <span v-if="todayStats.invoices_count" style="font-size:12px;color:#94a3b8;">
+          | اليوم: {{ todayStats.invoices_count }} فاتورة - {{ formatMoney(todayStats.total_sales) }}
+        </span>
+        <span style="flex:1"></span>
+        <button
+          v-if="!productsLoaded"
+          class="btn btn-sm btn-primary"
+          @click="loadProducts"
+        >
+          <span class="spinner" style="width:12px;height:12px;border-width:2px;"></span>
+          جاري التحميل...
+        </button>
+      </div>
+
+      <!-- Products grid -->
+      <div class="products-grid" v-if="filteredProducts.length">
+        <div
+          v-for="p in filteredProducts"
+          :key="p.id"
+          class="product-card"
+          :class="{ 'out-of-stock': settings.show_stock === '1' && p.stock <= 0 }"
+          @click="addToInvoice(p)"
+        >
+          <div class="p-name">{{ p.name }}</div>
+          <div class="p-price">{{ formatMoney(p.price) }}</div>
+          <div class="p-stock" v-if="settings.show_stock === '1'">
+            <span v-if="p.stock <= 0" style="color:#dc2626;">نفد</span>
+            <span v-else-if="p.stock <= 5" style="color:#d97706;">{{ p.stock }} {{ p.unit }}</span>
+            <span v-else style="color:#16a34a;">{{ p.stock }} {{ p.unit }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="empty-state" v-else-if="productsLoaded">
+        <div class="empty-icon">🔍</div>
+        <p v-if="searchQuery">لا توجد نتائج لـ "{{ searchQuery }}"</p>
+        <p v-else>لا توجد منتجات. <a href="/products">أضف منتجات</a></p>
+      </div>
+
+      <div class="empty-state" v-else>
+        <div class="spinner" style="width:32px;height:32px;margin:0 auto 12px;border-color:#e2e8f0;border-top-color:var(--primary);"></div>
+        <p>جاري تحميل المنتجات...</p>
+      </div>
+    </div>
+
+    <!-- ===== Invoice Panel ===== -->
+    <div class="pos-invoice">
+      <div class="invoice-header">
+        <div>
+          <h5>🧾 الفاتورة</h5>
+          <div style="font-size:11.5px;color:#94a3b8;margin-top:2px;">{{ cartItems.length }} صنف</div>
+        </div>
+        <button class="btn btn-sm btn-danger" @click="clearCart" v-if="cartItems.length">
+          🗑 مسح
+        </button>
+      </div>
+
+      <!-- Items list -->
+      <div class="invoice-items">
+        <div v-if="!cartItems.length" class="empty-state" style="padding:40px 20px;">
+          <div class="empty-icon">🛒</div>
+          <p>اختر منتجاً من القائمة</p>
+        </div>
+
+        <div
+          v-for="(item, idx) in cartItems"
+          :key="item.product_id + '-' + idx"
+          class="invoice-item"
+        >
+          <div style="flex:1;min-width:0;">
+            <div class="item-name">{{ item.product_name }}</div>
+            <div class="item-price">{{ formatMoney(item.unit_price) }} × {{ item.quantity }}</div>
+          </div>
+          <div class="qty-ctrl">
+            <div class="qty-btn" @click="decreaseQty(idx)">−</div>
+            <div class="qty-display">{{ item.quantity }}</div>
+            <div class="qty-btn" @click="increaseQty(idx)">+</div>
+          </div>
+          <div class="item-subtotal">{{ formatMoney(item.unit_price * item.quantity) }}</div>
+          <div class="item-del" @click="removeItem(idx)" title="حذف">✕</div>
+        </div>
+      </div>
+
+      <!-- Totals -->
+      <div class="invoice-totals">
+        <div class="total-row">
+          <span>المجموع</span>
+          <span>{{ formatMoney(subtotal) }}</span>
+        </div>
+        <div class="total-row" v-if="discount > 0">
+          <span style="color:var(--danger);">خصم</span>
+          <span style="color:var(--danger);">- {{ formatMoney(discount) }}</span>
+        </div>
+        <div class="total-row grand">
+          <span>الإجمالي</span>
+          <span>{{ formatMoney(netTotal) }}</span>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="invoice-actions">
+        <button
+          class="btn btn-success btn-block btn-lg"
+          @click="openPayment"
+          :disabled="!cartItems.length"
+          style="font-size:16px;font-weight:800;"
+        >
+          💰 إتمام البيع
+        </button>
+        <div style="display:flex;gap:6px;margin-top:8px;">
+          <button class="btn btn-outline btn-sm" style="flex:1;" @click="addDiscount">
+            🏷 خصم
+          </button>
+          <button class="btn btn-outline btn-sm" style="flex:1;" @click="focusSearch">
+            🔍 بحث
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Payment Modal ===== -->
+  <div class="modal-overlay" v-if="showPayment" @click.self="showPayment=false">
+    <div class="modal-box" style="max-width:420px;">
+      <div class="modal-header">
+        <h5>💰 تفاصيل الدفع</h5>
+        <button class="btn-close" @click="showPayment=false">✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="text-align:center;margin-bottom:12px;">
+          <div style="font-size:13px;color:#64748b;margin-bottom:4px;">المبلغ المطلوب</div>
+          <div class="big-total">{{ formatMoney(netTotal) }}</div>
+        </div>
+
+        <div class="discount-row">
+          <label style="font-size:13px;font-weight:600;flex-shrink:0;">خصم:</label>
+          <input type="number" class="form-control" v-model.number="discount" min="0" style="width:100px;direction:ltr;" @input="recalc">
+          <span style="font-size:13px;color:#64748b;">{{ settings.currency || 'ج.م' }}</span>
+        </div>
+
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px;">المبلغ المدفوع:</div>
+        <div style="background:#f8fafc;border:2px solid #e2e8f0;border-radius:10px;padding:12px;font-size:28px;font-weight:800;text-align:center;direction:ltr;min-height:56px;letter-spacing:2px;margin-bottom:10px;">
+          {{ paidDisplay || '0' }}
+        </div>
+
+        <!-- Quick amounts -->
+        <div class="payment-shortcuts">
+          <button class="shortcut-btn" @click="setPaid(netTotal)">المبلغ بالكامل</button>
+          <button class="shortcut-btn" v-for="v in quickAmounts" :key="v" @click="setPaid(v)">
+            {{ formatMoney(v) }}
+          </button>
+        </div>
+
+        <!-- Numpad -->
+        <div class="numpad" style="margin-top:10px;">
+          <button class="num-btn" v-for="n in ['7','8','9','4','5','6','1','2','3']" :key="n" @click="numpadPress(n)">{{ n }}</button>
+          <button class="num-btn clear-btn" @click="numpadPress('C')">C</button>
+          <button class="num-btn" @click="numpadPress('0')">0</button>
+          <button class="num-btn del-btn" @click="numpadPress('⌫')">⌫</button>
+        </div>
+
+        <!-- Change -->
+        <div class="change-display" v-if="paidAmount >= netTotal">
+          <span class="change-label">الباقي للعميل</span>
+          <span class="change-val">{{ formatMoney(change) }}</span>
+        </div>
+        <div v-else-if="paidAmount > 0 && paidAmount < netTotal"
+             style="background:#fff7ed;border:2px solid #fed7aa;border-radius:10px;padding:10px 14px;display:flex;justify-content:space-between;margin-top:10px;">
+          <span style="font-weight:600;color:#c2410c;">ناقص</span>
+          <span style="font-size:18px;font-weight:800;color:#c2410c;direction:ltr;">{{ formatMoney(netTotal - paidAmount) }}</span>
+        </div>
+
+        <!-- Payment method -->
+        <div style="margin-top:12px;">
+          <div style="font-size:13px;font-weight:600;margin-bottom:6px;">طريقة الدفع:</div>
+          <div style="display:flex;gap:8px;">
+            <button
+              v-for="m in [{v:'cash',l:'نقدي 💵'},{v:'card',l:'بطاقة 💳'},{v:'other',l:'أخرى'}]"
+              :key="m.v"
+              class="btn btn-sm"
+              :class="paymentMethod === m.v ? 'btn-primary' : 'btn-outline'"
+              @click="paymentMethod = m.v"
+            >{{ m.l }}</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" @click="showPayment=false">إلغاء</button>
+        <button
+          class="btn btn-success"
+          :disabled="paidAmount < netTotal || saving"
+          @click="completeSale"
+          style="min-width:120px;"
+        >
+          <span v-if="!saving">✅ إتمام البيع</span>
+          <span v-else class="spinner" style="width:16px;height:16px;border-width:2px;"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Receipt (for printing) ===== -->
+  <div id="receipt" class="thermal-print-root" v-if="lastInvoice">
+    <div class="receipt-shell">
+      <div class="receipt-brand-mark"></div>
+      <div class="receipt-header">
+        <h2>{{ settings.shop_name || 'المحل' }}</h2>
+        <p class="receipt-subtitle">فاتورة بيع نقدي</p>
+      </div>
+      <div class="receipt-meta-grid">
+        <div class="receipt-meta-row">
+          <span>رقم الفاتورة</span>
+          <strong>{{ lastInvoice.invoice_number }}</strong>
+        </div>
+        <div class="receipt-meta-row">
+          <span>التاريخ</span>
+          <strong>{{ receiptMeta.printed_at }}</strong>
+        </div>
+        <div class="receipt-meta-row">
+          <span>الكاشير</span>
+          <strong>{{ receiptMeta.cashier_name }}</strong>
+        </div>
+        <div class="receipt-meta-row">
+          <span>الدفع</span>
+          <strong>{{ paymentMethodLabel(receiptMeta.payment_method) }}</strong>
+        </div>
+      </div>
+      <hr class="receipt-divider">
+      <table class="receipt-table">
+        <thead>
+          <tr>
+            <th>الصنف</th>
+            <th>ك</th>
+            <th>سعر</th>
+            <th>إجمالي</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="(item, index) in cartItemsSnapshot" :key="item.product_id + '-' + index">
+            <td class="receipt-item-name">{{ item.product_name }}</td>
+            <td>{{ item.quantity }}</td>
+            <td>{{ formatMoney(item.unit_price) }}</td>
+            <td>{{ formatMoney(item.unit_price * item.quantity) }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <hr class="receipt-divider">
+      <div class="receipt-summary">
+        <div class="receipt-summary-row">
+          <span>المجموع</span>
+          <strong>{{ formatMoney(receiptMeta.subtotal) }}</strong>
+        </div>
+        <div class="receipt-summary-row" v-if="receiptMeta.discount > 0">
+          <span>الخصم</span>
+          <strong>- {{ formatMoney(receiptMeta.discount) }}</strong>
+        </div>
+        <div class="receipt-summary-row receipt-summary-grand">
+          <span>الإجمالي النهائي</span>
+          <strong>{{ formatMoney(lastInvoice.net_total) }}</strong>
+        </div>
+        <div class="receipt-summary-row">
+          <span>المدفوع</span>
+          <strong>{{ formatMoney(receiptMeta.paid_amount) }}</strong>
+        </div>
+        <div v-if="lastInvoice.change_amount > 0" class="receipt-summary-row receipt-summary-change">
+          <span>الباقي</span>
+          <strong>{{ formatMoney(lastInvoice.change_amount) }}</strong>
+        </div>
+      </div>
+      <hr class="receipt-divider">
+      <div class="receipt-footer">{{ settings.receipt_footer || 'شكراً لزيارتكم' }}</div>
+      <div class="receipt-footer-note">نتشرف بخدمتكم مرة أخرى</div>
+    </div>
+  </div>
+
+  <!-- ===== Receipt Preview ===== -->
+  <div class="modal-overlay" v-if="showReceiptPreview" @click.self="showReceiptPreview=false">
+    <div class="modal-box receipt-preview-modal">
+      <div class="modal-header">
+        <h5>🧾 معاينة الفاتورة</h5>
+        <button class="btn-close" @click="showReceiptPreview=false">✕</button>
+      </div>
+      <div class="modal-body receipt-preview-body">
+        <div class="receipt-preview-sheet">
+          <div class="receipt-shell">
+            <div class="receipt-brand-mark"></div>
+            <div class="receipt-header">
+              <h2>{{ settings.shop_name || 'المحل' }}</h2>
+              <p class="receipt-subtitle">فاتورة بيع نقدي</p>
+            </div>
+            <div class="receipt-meta-grid">
+              <div class="receipt-meta-row">
+                <span>رقم الفاتورة</span>
+                <strong>{{ lastInvoice?.invoice_number }}</strong>
+              </div>
+              <div class="receipt-meta-row">
+                <span>التاريخ</span>
+                <strong>{{ receiptMeta.printed_at }}</strong>
+              </div>
+              <div class="receipt-meta-row">
+                <span>الكاشير</span>
+                <strong>{{ receiptMeta.cashier_name }}</strong>
+              </div>
+              <div class="receipt-meta-row">
+                <span>الدفع</span>
+                <strong>{{ paymentMethodLabel(receiptMeta.payment_method) }}</strong>
+              </div>
+            </div>
+            <hr class="receipt-divider">
+            <table class="receipt-table">
+              <thead>
+                <tr>
+                  <th>الصنف</th>
+                  <th>ك</th>
+                  <th>سعر</th>
+                  <th>إجمالي</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(item, index) in cartItemsSnapshot" :key="'preview-' + item.product_id + '-' + index">
+                  <td class="receipt-item-name">{{ item.product_name }}</td>
+                  <td>{{ item.quantity }}</td>
+                  <td>{{ formatMoney(item.unit_price) }}</td>
+                  <td>{{ formatMoney(item.unit_price * item.quantity) }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <hr class="receipt-divider">
+            <div class="receipt-summary">
+              <div class="receipt-summary-row">
+                <span>المجموع</span>
+                <strong>{{ formatMoney(receiptMeta.subtotal) }}</strong>
+              </div>
+              <div class="receipt-summary-row" v-if="receiptMeta.discount > 0">
+                <span>الخصم</span>
+                <strong>- {{ formatMoney(receiptMeta.discount) }}</strong>
+              </div>
+              <div class="receipt-summary-row receipt-summary-grand">
+                <span>الإجمالي النهائي</span>
+                <strong>{{ formatMoney(lastInvoice?.net_total) }}</strong>
+              </div>
+              <div class="receipt-summary-row">
+                <span>المدفوع</span>
+                <strong>{{ formatMoney(receiptMeta.paid_amount) }}</strong>
+              </div>
+              <div v-if="lastInvoice?.change_amount > 0" class="receipt-summary-row receipt-summary-change">
+                <span>الباقي</span>
+                <strong>{{ formatMoney(lastInvoice.change_amount) }}</strong>
+              </div>
+            </div>
+            <hr class="receipt-divider">
+            <div class="receipt-footer">{{ settings.receipt_footer || 'شكراً لزيارتكم' }}</div>
+            <div class="receipt-footer-note">نتشرف بخدمتكم مرة أخرى</div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" @click="showReceiptPreview=false">إغلاق</button>
+        <button class="btn btn-primary" @click="printReceiptNow">🖨 طباعة</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast-container"></div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+const { createApp, ref, computed, onMounted, nextTick } = Vue;
+
+createApp({
+  setup() {
+    const settings       = ref({});
+    const allProducts    = ref([]);
+    const productsLoaded = ref(false);
+    const searchQuery    = ref('');
+    const cartItems      = ref([]);
+    const discount       = ref(0);
+    const searchInput    = ref(null);
+    const todayStats     = ref({});
+    const currentUser    = ref(null);
+
+    // Payment
+    const showPayment   = ref(false);
+    const paidDisplay   = ref('');
+    const paymentMethod = ref('cash');
+    const saving        = ref(false);
+    const lastInvoice   = ref(null);
+    const showReceiptPreview = ref(false);
+    const cartItemsSnapshot = ref([]);
+    const receiptMeta = ref({
+      subtotal: 0,
+      discount: 0,
+      paid_amount: 0,
+      payment_method: 'cash',
+      cashier_name: '',
+      printed_at: ''
+    });
+
+    // Computed
+    const subtotal = computed(() =>
+      cartItems.value.reduce((s, i) => s + i.unit_price * i.quantity, 0)
+    );
+    const netTotal = computed(() => Math.max(0, subtotal.value - (discount.value || 0)));
+    const paidAmount = computed(() => {
+      const v = parseFloat(paidDisplay.value);
+      return isNaN(v) ? 0 : v;
+    });
+    const change = computed(() => Math.max(0, paidAmount.value - netTotal.value));
+    const quickAmounts = computed(() => {
+      const t = netTotal.value;
+      const candidates = [50, 100, 200, 500].filter(v => v >= t);
+      return candidates.slice(0, 3);
+    });
+
+    const filteredProducts = computed(() => {
+      const q = searchQuery.value.trim().toLowerCase();
+      if (!q) return allProducts.value;
+      return allProducts.value.filter(p =>
+        p.name.toLowerCase().includes(q) || (p.barcode && p.barcode.includes(q))
+      );
+    });
+
+    function formatMoney(amount) {
+      const cur = settings.value.currency || 'ج.م';
+      const pos = settings.value.currency_position || 'after';
+      const val = parseFloat(amount || 0).toFixed(2);
+      return pos === 'before' ? `${cur} ${val}` : `${val} ${cur}`;
+    }
+
+    async function loadSettings() {
+      const r = await fetch('/api/settings');
+      const d = await r.json();
+      if (d.success) settings.value = d.data;
+    }
+
+    async function loadProducts() {
+      productsLoaded.value = false;
+      const r = await fetch('/api/products');
+      const d = await r.json();
+      if (d.success) {
+        allProducts.value = d.data;
+        productsLoaded.value = true;
+        // cache in localStorage for offline
+        try { localStorage.setItem('pos_products', JSON.stringify(d.data)); } catch {}
+      } else {
+        // try cache
+        try {
+          const cached = localStorage.getItem('pos_products');
+          if (cached) { allProducts.value = JSON.parse(cached); productsLoaded.value = true; }
+        } catch {}
+      }
+    }
+
+    async function loadTodayStats() {
+      const r = await fetch('/api/invoices/stats/today');
+      const d = await r.json();
+      if (d.success) todayStats.value = d.data;
+    }
+
+    function reloadProducts() { loadProducts(); loadTodayStats(); }
+
+    function addToInvoice(product) {
+      const existing = cartItems.value.find(i => i.product_id === product.id);
+      if (existing) {
+        existing.quantity++;
+      } else {
+        cartItems.value.push({
+          product_id:   product.id,
+          product_name: product.name,
+          barcode:      product.barcode,
+          unit:         product.unit,
+          unit_price:   parseFloat(product.price),
+          quantity:     1,
+        });
+      }
+      // clear search after adding
+      searchQuery.value = '';
+      focusSearch();
+    }
+
+    function removeItem(idx) { cartItems.value.splice(idx, 1); }
+    function increaseQty(idx) { cartItems.value[idx].quantity++; }
+    function decreaseQty(idx) {
+      if (cartItems.value[idx].quantity > 1) cartItems.value[idx].quantity--;
+      else removeItem(idx);
+    }
+    function clearCart() {
+      if (!cartItems.value.length) return;
+      if (confirm('مسح الفاتورة الحالية؟')) {
+        cartItems.value = [];
+        discount.value = 0;
+      }
+    }
+
+    function focusSearch() {
+      nextTick(() => searchInput.value?.focus());
+    }
+
+    function handleSearchEnter() {
+      if (filteredProducts.value.length === 1) {
+        addToInvoice(filteredProducts.value[0]);
+      }
+    }
+
+    function clearSearch() { searchQuery.value = ''; focusSearch(); }
+
+    function addDiscount() {
+      const val = prompt('أدخل قيمة الخصم:', discount.value || 0);
+      if (val !== null && !isNaN(parseFloat(val))) {
+        discount.value = Math.max(0, parseFloat(val));
+      }
+    }
+
+    function openPayment() {
+      if (!cartItems.value.length) return;
+      setPaid(netTotal.value);
+      paymentMethod.value = 'cash';
+      showPayment.value = true;
+    }
+
+    function numpadPress(key) {
+      if (key === 'C') { paidDisplay.value = ''; return; }
+      if (key === '⌫') { paidDisplay.value = paidDisplay.value.slice(0, -1); return; }
+      if (key === '.' && paidDisplay.value.includes('.')) return;
+      if (paidDisplay.value.length >= 10) return;
+      paidDisplay.value += key;
+    }
+
+    function setPaid(amount) {
+      paidDisplay.value = parseFloat(amount).toFixed(2).replace(/\.00$/, '');
+    }
+
+    function recalc() {
+      setPaid(netTotal.value);
+    }
+
+    function paymentMethodLabel(method) {
+      if (method === 'card') return 'بطاقة';
+      if (method === 'other') return 'أخرى';
+      return 'نقدي';
+    }
+
+    function printReceiptNow() {
+      showReceiptPreview.value = false;
+      setTimeout(() => window.print(), 150);
+    }
+
+    async function readApiResponse(response) {
+      const text = await response.text();
+      try {
+        return text ? JSON.parse(text) : {};
+      } catch {
+        return {
+          success: false,
+          message: response.ok
+            ? 'تعذر قراءة رد الخادم'
+            : `خطأ من الخادم (${response.status})`
+        };
+      }
+    }
+
+    async function completeSale() {
+      if (saving.value) return;
+      saving.value = true;
+      try {
+        const receiptItems = [...cartItems.value];
+        const receiptData = {
+          subtotal: subtotal.value,
+          discount: discount.value || 0,
+          paid_amount: Math.max(netTotal.value, paidAmount.value),
+          payment_method: paymentMethod.value,
+          cashier_name: (currentUser.value && (currentUser.value.full_name || currentUser.value.username)) || 'الكاشير',
+          printed_at: new Date().toLocaleString('ar-EG')
+        };
+        const payload = {
+          items: cartItems.value,
+          discount: discount.value || 0,
+          paid_amount: Math.max(netTotal.value, paidAmount.value),
+          payment_method: paymentMethod.value,
+        };
+        const r = await fetch('/api/invoices', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const d = await readApiResponse(r);
+        if (d.success) {
+          lastInvoice.value = d.invoice;
+          cartItemsSnapshot.value = receiptItems;
+          receiptMeta.value = receiptData;
+          showPayment.value = false;
+          showReceiptPreview.value = true;
+          showToast(`✅ تم البيع بنجاح! الباقي: ${formatMoney(d.invoice.change_amount)}`, 'success');
+
+          // reset
+          cartItems.value = [];
+          discount.value = 0;
+          paidDisplay.value = '';
+          loadTodayStats().catch(console.error);
+          loadProducts().catch(console.error);
+          focusSearch();
+        } else {
+          showToast(d.message || (r.status === 401 ? 'انتهت الجلسة - سجل الدخول مرة أخرى' : 'حدث خطأ'), 'error');
+        }
+      } catch (error) {
+        console.error(error);
+        showToast('خطأ في الاتصال بالخادم', 'error');
+      } finally {
+        saving.value = false;
+      }
+    }
+
+    function doLogout() {
+      if (confirm('تسجيل الخروج؟')) logout();
+    }
+
+    onMounted(async () => {
+      currentUser.value = await getCurrentUser();
+      await loadSettings();
+      await loadProducts();
+      await loadTodayStats();
+      focusSearch();
+    });
+
+    return {
+      settings, allProducts, productsLoaded, searchQuery, searchInput,
+      cartItems, discount, todayStats,
+      showPayment, paidDisplay, paymentMethod, saving, lastInvoice, showReceiptPreview, cartItemsSnapshot, receiptMeta,
+      subtotal, netTotal, paidAmount, change, quickAmounts, filteredProducts,
+      formatMoney, loadProducts, reloadProducts, addToInvoice, removeItem,
+      increaseQty, decreaseQty, clearCart, focusSearch, handleSearchEnter, clearSearch,
+      addDiscount, openPayment, numpadPress, setPaid, recalc, paymentMethodLabel, printReceiptNow, completeSale, doLogout,
+    };
+  }
+}).mount('#app');
+</script>
+</body>
+</html>

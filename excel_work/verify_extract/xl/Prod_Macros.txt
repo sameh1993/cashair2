@@ -1,0 +1,17 @@
+(ryxME< Product Load to True x xG * x 6%0!. x 6%0!.7((.j xxA@zB87((.qop] "  %.~ ~Select a Product Picture9All Picture Files)*.jpg,*jpeg,*.gif,*.png,*.gif,*bmp,*.tiff5B@Z5Gj7O14 "%((.2Put File name in O14q-On Existing Products, Add/Update Picture LinkB77(!.GO147(!.KB6 "%(!. 6%((.jA@z qo] "ThumbPic7VB@T#!Delete thumbnail picture (if any)O147(!.'&Picture Path G|j 5%5 9U9ThumbPic9q(q ThumbPic7VK3 "%(!9K3 "%(!92C@XC@qq	End Sheet 1oAttribute VB_Name = "Prod_Macros"
+
+Option Explicit
+Dim Row,Col  As LongbSub.oad()
+With Sheet1
+ If .Range("B6") .Valu|Empty Theoit I0o7K!8OTrV'Setuctad to 81GFord= 5 To 1U  XA<> 8Q9l2.Cells(1jnhINexZ	9
+_DisplayThumb
+xFalse
+End 
+ach$gticFileqDialosJnQ	= Ap
+a.(msoGAPickerE@9.TitCSele@gai	ture@`ters.Add "All  s", "*.jpg,*jpe@.gif,*.pnbmp0tiffHShHow t-1tGo~No#*n1E\O14.
+@edItem)  'Put& n1in @	e'OAstingE<s, 7/Upda7Link
+@F{7B{-K" &GRM
+(":)?MKbTKPaS`JK<a'-!A$rrrResu a.Shapes("a%"D`H@''tdnail picaI (if any@Q>0 
+=h$ '"
+a4Vb.s.Insert(g;a.LockAsp hRqp+fHeight@850	*k	/c3+	.Lefs+kK38!T<op pLIncrement|-5:a`-a
+17'% '!6 @u A

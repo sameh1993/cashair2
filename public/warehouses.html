@@ -1,0 +1,1984 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>المخازن | نظام الكاشير</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <style>
+    .section-tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    .section-tab {
+      padding: 9px 14px;
+      border-radius: 999px;
+      border: 1px solid #dbeafe;
+      background: #fff;
+      color: #1d4ed8;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all .18s ease;
+      font-family: 'Cairo', sans-serif;
+    }
+
+    .section-tab.active {
+      background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+      color: #fff;
+      border-color: transparent;
+      box-shadow: 0 12px 24px rgba(37, 99, 235, .18);
+    }
+
+    .section-shell {
+      display: grid;
+      grid-template-columns: 1.2fr .8fr;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .soft-panel {
+      background: linear-gradient(135deg, #f8fbff 0%, #eef6ff 100%);
+      border: 1px solid #dbeafe;
+      border-radius: 16px;
+      padding: 14px;
+    }
+
+    .soft-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: #1e3a8a;
+      margin-bottom: 10px;
+    }
+
+    .metric-inline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 0;
+      border-bottom: 1px dashed #dbeafe;
+      font-size: 13px;
+    }
+
+    .metric-inline:last-child {
+      border-bottom: 0;
+      padding-bottom: 0;
+    }
+
+    .ledger-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      padding: 5px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      background: #eff6ff;
+      color: #1d4ed8;
+    }
+
+    .document-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .document-summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .summary-box {
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+    }
+
+    .summary-box .label {
+      color: #64748b;
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
+
+    .summary-box .value {
+      font-size: 20px;
+      font-weight: 800;
+      color: #0f172a;
+    }
+
+    .status-positive {
+      color: #b91c1c;
+      font-weight: 800;
+    }
+
+    .status-zero {
+      color: #15803d;
+      font-weight: 800;
+    }
+
+    .section-note {
+      border-radius: 14px;
+      padding: 12px 14px;
+      background: #fff7ed;
+      border: 1px solid #fed7aa;
+      color: #9a3412;
+      font-size: 13px;
+      margin-bottom: 14px;
+    }
+
+    @media (max-width: 992px) {
+      .section-shell {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="app" class="app-layout" v-cloak>
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <div class="logo-icon">🛒</div>
+        <div>
+          <div class="logo-text">نظام الكاشير</div>
+          <div class="logo-sub">إدارة المخازن</div>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="/pos" class="nav-item"><span class="nav-icon">💰</span> الكاشير</a>
+        <a href="/products" class="nav-item"><span class="nav-icon">📦</span> المنتجات</a>
+        <a href="/low-stock" class="nav-item"><span class="nav-icon">🚨</span> قرب النفاد</a>
+        <a href="/invoices" class="nav-item"><span class="nav-icon">🧾</span> الفواتير</a>
+        <a href="/warehouses" class="nav-item active"><span class="nav-icon">🏬</span> المخازن</a>
+        <a href="/settings" class="nav-item"><span class="nav-icon">⚙️</span> الإعدادات</a>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-info">
+          <div class="user-avatar" id="sidebar-avatar">A</div>
+          <div style="min-width:0;flex:1;">
+            <div
+              style="color:#e2e8f0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+              id="sidebar-username">...</div>
+            <div style="font-size:11px;cursor:pointer;" @click="doLogout">تسجيل خروج</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <div class="main-content">
+      <div class="topbar">
+        <div class="topbar-title">🏬 موديول المخازن والمديونيات</div>
+        <button class="btn btn-outline" @click="refreshAll" :disabled="loadingPage">
+          <span v-if="!loadingPage">تحديث</span>
+          <span v-else class="spinner" style="width:14px;height:14px;border-width:2px;"></span>
+        </button>
+      </div>
+
+      <div class="page-body">
+        <div
+          style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;margin-bottom:18px;">
+          <div class="stat-card">
+            <div class="stat-value" style="color:var(--primary);">{{ dashboard.warehouses_count || 0 }}</div>
+            <div class="stat-label">المخزن الرئيسي</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" style="color:var(--success);">{{ formatQty(dashboard.total_stock_quantity || 0) }}
+            </div>
+            <div class="stat-label">إجمالي الرصيد الكمي</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" style="color:var(--warning);">{{ dashboard.documents_today || 0 }}</div>
+            <div class="stat-label">حركات اليوم</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" style="color:#0f766e;">{{ dashboard.counts_today || 0 }}</div>
+            <div class="stat-label">عمليات الجرد اليوم</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" style="color:#b91c1c;">{{ formatMoneyValue(dashboard.customer_debt_total || 0) }}
+            </div>
+            <div class="stat-label">مديونية العملاء</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" style="color:#7c3aed;">{{ formatMoneyValue(dashboard.supplier_debt_total || 0) }}
+            </div>
+            <div class="stat-label">مديونية الموردين</div>
+          </div>
+        </div>
+
+        <div class="section-tabs">
+          <button class="section-tab" :class="{ active: activeSection === 'documents' }"
+            @click="activeSection = 'documents'">أذونات المخزن</button>
+          <button class="section-tab" :class="{ active: activeSection === 'balances' }"
+            @click="activeSection = 'balances'">رصيد المخزن</button>
+          <button class="section-tab" :class="{ active: activeSection === 'counts' }"
+            @click="activeSection = 'counts'">جرد المخزن</button>
+          <button class="section-tab" :class="{ active: activeSection === 'debts' }"
+            @click="activeSection = 'debts'">مديونيات العملاء والموردين</button>
+          <button class="section-tab" :class="{ active: activeSection === 'setup' }"
+            @click="activeSection = 'setup'">إضافة عميل/مورد</button>
+        </div>
+
+        <div v-if="activeSection === 'documents'">
+          <div class="section-shell">
+            <div class="card">
+              <div class="card-header">
+                <h5>📝 إنشاء إذن مخزني</h5>
+                <span class="ledger-pill">{{ selectedDocumentType.label }}</span>
+              </div>
+              <div class="card-body">
+                <div v-if="!canManageWarehouseDocuments" class="section-note">
+                  صلاحيات إنشاء وتعديل أذونات المخزن متاحة للمدير والكاشير فقط. يمكنك عرض الأرصدة والحركات والمديونيات من هذه
+                  الشاشة.
+                </div>
+
+                <div v-if="editingDocumentId" class="section-note"
+                  style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+                  <span>أنت الآن تعدّل الإذن رقم {{ editingDocumentNumber || '-' }}</span>
+                  <button class="btn btn-sm btn-outline" @click="cancelDocumentEditing">إلغاء التعديل</button>
+                </div>
+
+                <div class="document-grid">
+                  <div class="form-group" style="margin:0;">
+                    <label class="form-label">نوع الإذن</label>
+                    <select class="form-control" v-model="documentForm.document_type" :disabled="!canManageWarehouseDocuments"
+                      @change="handleDocumentTypeChange">
+                      <option v-for="item in documentTypes" :key="item.value" :value="item.value">{{ item.label }}
+                      </option>
+                    </select>
+                  </div>
+                  <div class="form-group" style="margin:0;">
+                    <label class="form-label">المخزن</label>
+                    <div class="form-control" style="background:#f8fafc;">{{ mainWarehouseName }}</div>
+                  </div>
+                  <div class="form-group" style="margin:0;">
+                    <label class="form-label">{{ selectedDocumentType.partnerLabel }}</label>
+                    <select class="form-control" v-model="documentForm.partner_id"
+                      :disabled="!requiresPartner || !canManageWarehouseDocuments">
+                      <option value="">{{ requiresPartner ? 'اختر الطرف' : 'غير مطلوب' }}</option>
+                      <option v-for="partner in availablePartners" :key="partner.id" :value="partner.id">
+                        {{ partner.name }} | {{ partner.type === 'customer' ? 'عميل' : 'مورد' }}
+                      </option>
+                    </select>
+                  </div>
+                  <div class="form-group" style="margin:0;">
+                    <label class="form-label">المبلغ المسدد الآن</label>
+                    <input type="number" class="form-control" v-model.number="documentForm.paid_amount" min="0"
+                      step="0.01" style="direction:ltr;" :disabled="!canManageWarehouseDocuments">
+                  </div>
+                  <div class="form-group" style="margin:0;grid-column:1/-1;">
+                    <label class="form-label">ملاحظات</label>
+                    <textarea class="form-control" rows="2" v-model.trim="documentForm.notes" :disabled="!canManageWarehouseDocuments"
+                      placeholder="اختياري"></textarea>
+                  </div>
+                </div>
+
+                <div
+                  style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+                  <div class="text-muted" style="font-size:12px;">
+                    اكتب اسم الصنف أو الباركود، ثم حدّد الكمية والسعر داخل الإذن.
+                  </div>
+                  <button class="btn btn-sm btn-outline" @click="addDocumentItem" :disabled="!canManageWarehouseDocuments">+ إضافة
+                    صنف</button>
+                </div>
+
+                <div class="table-wrapper text-center">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>الصنف</th>
+                        <th>الكمية</th>
+                        <th>السعر</th>
+                        <th>الإجمالي</th>
+                        <th>حذف</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-if="!documentForm.items.length">
+                        <td colspan="5" class="text-center" style="padding:26px;color:#94a3b8;">لا توجد أصناف في الإذن
+                        </td>
+                      </tr>
+                      <tr v-for="(item, index) in documentForm.items" :key="item.uid">
+                        <td style="min-width:260px;">
+                          <input type="text" class="form-control" v-model.trim="item.product_name"
+                            list="warehouse-products-list" placeholder="اسم الصنف أو الباركود"
+                            @change="syncDocumentItem(item)" @blur="syncDocumentItem(item)" :disabled="!canManageWarehouseDocuments">
+                          <div v-if="item.product_id && findProductById(item.product_id)" class="text-muted"
+                            style="font-size:11px;margin-top:4px;">
+                            الرصيد الكلي الحالي: {{ formatQty(findProductById(item.product_id).stock) }}
+                          </div>
+                        </td>
+                        <td style="min-width:130px;">
+                          <input type="number" class="form-control" v-model.number="item.quantity" min="0.001"
+                            step="0.001" style="direction:ltr;" :disabled="!canManageWarehouseDocuments">
+                        </td>
+                        <td style="min-width:150px;">
+                          <input type="number" class="form-control" v-model.number="item.unit_price" min="0" step="0.01"
+                            style="direction:ltr;" :disabled="!canManageWarehouseDocuments">
+                        </td>
+                        <td class="fw-bold" style="color:var(--primary);white-space:nowrap;">
+                          {{ formatMoneyValue(lineTotal(item)) }}
+                        </td>
+                        <td>
+                          <button class="btn btn-sm btn-danger" @click="removeDocumentItem(index)"
+                            :disabled="!canManageWarehouseDocuments">حذف</button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <datalist id="warehouse-products-list">
+                  <option v-for="product in products" :key="'name-' + product.id" :value="product.name">{{
+                    product.barcode || '' }}</option>
+                  <template v-for="product in products" :key="'code-' + product.id">
+                    <option v-if="product.barcode" :value="product.barcode">{{ product.name }}</option>
+                  </template>
+                </datalist>
+
+                <div class="document-summary">
+                  <div class="summary-box">
+                    <div class="label">إجمالي الإذن</div>
+                    <div class="value">{{ formatMoneyValue(documentSubtotal) }}</div>
+                  </div>
+                  <div class="summary-box">
+                    <div class="label">المسدد الآن</div>
+                    <div class="value">{{ formatMoneyValue(documentForm.paid_amount || 0) }}</div>
+                  </div>
+                  <div class="summary-box">
+                    <div class="label">أثر الإذن على المديونية</div>
+                    <div class="value" :class="documentDebtEffectClass">
+                      {{ documentDebtEffectLabel }}
+                    </div>
+                  </div>
+                </div>
+
+                <div v-if="documentError"
+                  style="background:#fee2e2;color:#b91c1c;border-radius:10px;padding:12px 14px;margin-top:14px;font-size:13px;">
+                  {{ documentError }}
+                </div>
+
+                <div style="margin-top:16px;display:flex;justify-content:flex-end;">
+                  <button v-if="editingDocumentId" class="btn btn-outline" @click="cancelDocumentEditing"
+                    style="margin-inline-end:8px;">
+                    إلغاء
+                  </button>
+                  <button class="btn btn-primary" @click="saveDocument" :disabled="documentSaving || !canManageWarehouseDocuments">
+                    <span v-if="!documentSaving">{{ editingDocumentId ? 'حفظ التعديل' : 'حفظ الإذن' }}</span>
+                    <span v-else class="spinner" style="width:14px;height:14px;border-width:2px;"></span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="soft-panel">
+              <div class="soft-title">آخر الحركات</div>
+              <div v-if="!documents.length" class="text-muted" style="font-size:13px;">لا توجد حركات حتى الآن.</div>
+              <div v-for="doc in documents.slice(0, 6)" :key="doc.id"
+                style="padding:10px 0;border-bottom:1px dashed #dbeafe;">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+                  <div>
+                    <div style="font-weight:800;color:#0f172a;">{{ formatDocumentType(doc.document_type) }}</div>
+                    <div style="font-size:12px;color:#64748b;direction:ltr;">{{ doc.document_number }}</div>
+                  </div>
+                  <span class="badge badge-info">{{ doc.items_count }} صنف</span>
+                </div>
+                <div style="font-size:12px;color:#475569;margin-top:6px;">
+                  {{ doc.warehouse_name || '-' }}<span v-if="doc.partner_name"> | {{ doc.partner_name }}</span>
+                </div>
+                <div
+                  style="display:flex;justify-content:space-between;gap:8px;margin-top:6px;font-size:12px;color:#64748b;">
+                  <span>{{ formatDate(doc.created_at) }}</span>
+                  <span style="font-weight:700;color:#0f172a;">{{ formatMoneyValue(doc.subtotal) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:16px;">
+            <div class="card-header">
+              <h5>📚 سجل الأذونات</h5>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <select class="form-control" style="width:auto;" v-model="documentFilters.type">
+                  <option value="">كل الأنواع</option>
+                  <option v-for="item in documentTypes" :key="'flt-' + item.value" :value="item.value">{{ item.label }}
+                  </option>
+                </select>
+                <input type="text" class="form-control" style="width:220px;" placeholder="بحث بالرقم أو الطرف..."
+                  v-model.trim="documentFilters.search">
+              </div>
+            </div>
+            <div class="table-wrapper  text-center">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>رقم الإذن</th>
+                    <th>النوع</th>
+                    <th>المخزن</th>
+                    <th>الطرف</th>
+                    <th>المنشئ</th>
+                    <th>الإجمالي</th>
+                    <th>المسدد</th>
+                    <th>الأثر</th>
+                    <th>التاريخ</th>
+                    <th>الإجراءات</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-if="!filteredDocuments.length">
+                    <td colspan="11" class="text-center" style="padding:32px;color:#94a3b8;">لا توجد بيانات مطابقة</td>
+                  </tr>
+                  <tr v-for="doc in filteredDocuments" :key="'doc-row-' + doc.id">
+                    <td style="direction:ltr;text-align:right;font-weight:700;color:var(--primary);">{{
+                      doc.document_number }}</td>
+                    <td>{{ formatDocumentType(doc.document_type) }}</td>
+                    <td>{{ doc.warehouse_name || '-' }}</td>
+                    <td>{{ doc.partner_name || '-' }}</td>
+                    <td>{{ doc.created_by_name || '-' }}</td>
+                    <!-- <td style="max-width:260px;">
+                      <div style="font-size:13px;color:#334155;white-space:normal;">{{ doc.item_names || '-' }}</div>
+                      <div class="text-muted" style="font-size:12px;margin-top:4px;">{{ doc.items_count || 0 }} صنف
+                      </div>
+                    </td> -->
+                    <td>{{ formatMoneyValue(doc.subtotal) }}</td>
+                    <td>{{ formatMoneyValue(doc.paid_amount) }}</td>
+                    <td :class="Number(doc.debt_delta) > 0 ? 'status-positive' : 'status-zero'">
+                      {{ signedMoney(Number(doc.debt_delta) || 0) }}
+                    </td>
+                    <td class="text-muted" style="font-size:12px;white-space:nowrap;">{{ formatDate(doc.created_at) }}
+                    </td>
+                    <td>
+                      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                        <button class="btn btn-sm btn-outline" @click="openDocumentDetail(doc.id)">عرض</button>
+                        <button class="btn btn-sm btn-primary" @click="startDocumentEditing(doc)"
+                          :disabled="!canEditDocument(doc)">تعديل</button>
+                        <button class="btn btn-sm btn-danger" @click="deleteDocument(doc)"
+                          :disabled="!canDeleteDocument(doc)">حذف</button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div v-else-if="activeSection === 'balances'">
+          <div class="card">
+            <div class="card-header">
+              <h5>📦 رصيد المخزن الرئيسي</h5>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <input type="text" class="form-control" style="width:220px;" placeholder="بحث باسم الصنف أو الباركود"
+                  v-model.trim="balanceFilters.search">
+              </div>
+            </div>
+            <div class="table-wrapper text-center">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>الصنف</th>
+                    <th>الباركود</th>
+                    <th>الرصيد</th>
+                    <th>الوحدة</th>
+                    <th>السعر</th>
+                    <th>القيمة</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-if="!filteredBalances.length">
+                    <td colspan="6" class="text-center" style="padding:32px;color:#94a3b8;">لا توجد أرصدة مطابقة</td>
+                  </tr>
+                  <tr v-for="row in filteredBalances" :key="row.warehouse_id + '-' + row.product_id">
+                    <td>{{ row.product_name }}</td>
+                    <td style="direction:ltr;text-align:right;color:#64748b;font-size:12px;">{{ row.barcode || '-' }}
+                    </td>
+                    <td><span :class="Number(row.quantity) > 0 ? 'badge badge-success' : 'badge badge-danger'">{{
+                        formatQty(row.quantity) }}</span></td>
+                    <td>{{ row.unit || 'قطعة' }}</td>
+                    <td>{{ formatMoneyValue(row.price) }}</td>
+                    <td class="fw-bold">{{ formatMoneyValue(Number(row.quantity || 0) * Number(row.price || 0)) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div v-else-if="activeSection === 'counts'">
+          <div class="section-shell">
+            <div class="card">
+              <div class="card-header">
+                <h5>📋 تنفيذ جرد مخزن</h5>
+                <span class="ledger-pill">تسوية فعلية على الرصيد</span>
+              </div>
+              <div class="card-body">
+                <div v-if="!isAdmin" class="section-note">
+                  تنفيذ الجرد وتحديث الأرصدة متاح للمدير فقط، لكن يمكنك مراجعة سجل الجرد من هذه الشاشة.
+                </div>
+
+                <div class="document-grid">
+                  <div class="form-group" style="margin:0;grid-column:1/-1;">
+                    <label class="form-label">ملاحظات الجرد</label>
+                    <textarea class="form-control" rows="2" v-model.trim="countForm.notes" :disabled="!isAdmin"
+                      placeholder="مثال: جرد نهاية اليوم أو جرد دوري"></textarea>
+                  </div>
+                </div>
+
+                <div
+                  style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+                  <div class="text-muted" style="font-size:12px;">
+                    أدخل الكمية الفعلية التي تم عدّها، وسيحسب النظام الفرق تلقائيًا ويحدث الرصيد.
+                  </div>
+                  <button class="btn btn-sm btn-outline" @click="addCountItem" :disabled="!isAdmin">+ إضافة صنف
+                    للجرد</button>
+                </div>
+
+                <div class="table-wrapper text-center">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>الصنف</th>
+                        <th>رصيد النظام</th>
+                        <th>الكمية الفعلية</th>
+                        <th>الفرق</th>
+                        <th>القيمة</th>
+                        <th>حذف</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-if="!countForm.items.length">
+                        <td colspan="6" class="text-center" style="padding:26px;color:#94a3b8;">لا توجد أصناف في الجرد
+                        </td>
+                      </tr>
+                      <tr v-for="(item, index) in countForm.items" :key="item.uid">
+                        <td style="min-width:260px;">
+                          <input type="text" class="form-control" v-model.trim="item.product_name"
+                            list="warehouse-products-list" placeholder="اسم الصنف أو الباركود"
+                            @change="syncCountItem(item)" @blur="syncCountItem(item)" :disabled="!isAdmin">
+                        </td>
+                        <td>
+                          <span class="badge badge-info">{{ formatQty(getCountSystemQuantity(item)) }}</span>
+                        </td>
+                        <td style="min-width:150px;">
+                          <input type="number" class="form-control" v-model.number="item.actual_quantity" min="0"
+                            step="0.001" style="direction:ltr;" :disabled="!isAdmin">
+                        </td>
+                        <td
+                          :class="countDifference(item) === 0 ? 'status-zero' : countDifference(item) > 0 ? 'text-success fw-bold' : 'status-positive'">
+                          {{ signedQty(countDifference(item)) }}
+                        </td>
+                        <td class="fw-bold">{{ formatMoneyValue(countDifferenceValue(item)) }}</td>
+                        <td>
+                          <button class="btn btn-sm btn-danger" @click="removeCountItem(index)"
+                            :disabled="!isAdmin">حذف</button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div class="document-summary">
+                  <div class="summary-box">
+                    <div class="label">عدد الأصناف المجردة</div>
+                    <div class="value">{{ countForm.items.length }}</div>
+                  </div>
+                  <div class="summary-box">
+                    <div class="label">إجمالي فرق الكمية</div>
+                    <div class="value"
+                      :class="countTotalDifferenceQuantity === 0 ? 'status-zero' : countTotalDifferenceQuantity > 0 ? 'text-success' : 'status-positive'">
+                      {{ signedQty(countTotalDifferenceQuantity) }}
+                    </div>
+                  </div>
+                  <div class="summary-box">
+                    <div class="label">إجمالي فرق القيمة</div>
+                    <div class="value"
+                      :class="countTotalDifferenceValue === 0 ? 'status-zero' : countTotalDifferenceValue > 0 ? 'text-success' : 'status-positive'">
+                      {{ signedMoney(countTotalDifferenceValue) }}
+                    </div>
+                  </div>
+                </div>
+
+                <div v-if="countError"
+                  style="background:#fee2e2;color:#b91c1c;border-radius:10px;padding:12px 14px;margin-top:14px;font-size:13px;">
+                  {{ countError }}
+                </div>
+
+                <div style="margin-top:16px;display:flex;justify-content:flex-end;">
+                  <button class="btn btn-primary" @click="saveStockCount" :disabled="countSaving || !isAdmin">
+                    <span v-if="!countSaving">حفظ الجرد</span>
+                    <span v-else class="spinner" style="width:14px;height:14px;border-width:2px;"></span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="soft-panel">
+              <div class="soft-title">ملحوظة الجرد</div>
+              <div class="metric-inline">
+                <span>لو الفرق موجب</span>
+                <strong style="color:#15803d;">سيزيد الرصيد</strong>
+              </div>
+              <div class="metric-inline">
+                <span>لو الفرق سالب</span>
+                <strong style="color:#b91c1c;">سيتم تخفيض الرصيد</strong>
+              </div>
+              <div class="metric-inline">
+                <span>تاريخ التنفيذ</span>
+                <strong>{{ localNowLabel }}</strong>
+              </div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:16px;">
+            <div class="card-header">
+              <h5>🗂 سجل الجرد</h5>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <input type="text" class="form-control" style="width:220px;" placeholder="بحث برقم الجرد"
+                  v-model.trim="countFilters.search">
+              </div>
+            </div>
+            <div class="table-wrapper">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>رقم الجرد</th>
+                    <th>المخزن</th>
+                    <th>عدد الأصناف</th>
+                    <th>فرق الكمية</th>
+                    <th>فرق القيمة</th>
+                    <th>المنفذ</th>
+                    <th>التاريخ</th>
+                    <th>تفاصيل</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-if="!filteredStockCounts.length">
+                    <td colspan="8" class="text-center" style="padding:32px;color:#94a3b8;">لا توجد عمليات جرد مطابقة
+                    </td>
+                  </tr>
+                  <tr v-for="count in filteredStockCounts" :key="'count-' + count.id">
+                    <td style="direction:ltr;text-align:right;font-weight:700;color:var(--primary);">{{
+                      count.count_number }}</td>
+                    <td>{{ count.warehouse_name || '-' }}</td>
+                    <td>{{ count.items_count }}</td>
+                    <td
+                      :class="Number(count.total_difference_quantity) === 0 ? 'status-zero' : Number(count.total_difference_quantity) > 0 ? 'text-success fw-bold' : 'status-positive'">
+                      {{ signedQty(count.total_difference_quantity) }}
+                    </td>
+                    <td
+                      :class="Number(count.total_difference_value) === 0 ? 'status-zero' : Number(count.total_difference_value) > 0 ? 'text-success fw-bold' : 'status-positive'">
+                      {{ signedMoney(count.total_difference_value) }}
+                    </td>
+                    <td>{{ count.created_by_name || '-' }}</td>
+                    <td class="text-muted" style="font-size:12px;white-space:nowrap;">{{ formatDate(count.created_at) }}
+                    </td>
+                    <td><button class="btn btn-sm btn-outline" @click="openStockCountDetail(count.id)">عرض</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div v-else-if="activeSection === 'debts'">
+          <div class="card">
+            <div class="card-header">
+              <h5>💳 مديونيات العملاء والموردين</h5>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <select class="form-control" style="width:auto;" v-model="debtFilters.type">
+                  <option value="">الكل</option>
+                  <option value="customer">عملاء</option>
+                  <option value="supplier">موردون</option>
+                </select>
+                <input type="text" class="form-control" style="width:220px;" placeholder="بحث بالاسم أو الهاتف"
+                  v-model.trim="debtFilters.search">
+              </div>
+            </div>
+            <div class="table-wrapper">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>الاسم</th>
+                    <th>النوع</th>
+                    <th>الهاتف</th>
+                    <th>الرصيد</th>
+                    <th>آخر حركة</th>
+                    <th>إجراءات</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-if="!filteredPartners.length">
+                    <td colspan="6" class="text-center" style="padding:32px;color:#94a3b8;">لا توجد أطراف مطابقة</td>
+                  </tr>
+                  <tr v-for="partner in filteredPartners" :key="'partner-' + partner.id">
+                    <td class="fw-bold">{{ partner.name }}</td>
+                    <td>
+                      <span :class="partner.type === 'customer' ? 'badge badge-warning' : 'badge badge-info'">
+                        {{ partner.type === 'customer' ? 'عميل' : 'مورد' }}
+                      </span>
+                    </td>
+                    <td>{{ partner.phone || '-' }}</td>
+                    <td :class="Number(partner.balance) > 0 ? 'status-positive' : 'status-zero'">
+                      {{ formatMoneyValue(partner.balance || 0) }}
+                    </td>
+                    <td class="text-muted" style="font-size:12px;">{{ partner.last_activity ?
+                      formatDate(partner.last_activity) : '-' }}</td>
+                    <td>
+                      <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;">
+                        <button class="btn btn-sm btn-outline" @click="openLedger(partner)">كشف</button>
+                        <button class="btn btn-sm btn-primary" @click="openSettlement(partner)"
+                          :disabled="!isAdmin">تسوية</button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div v-else>
+          <div class="section-note" v-if="!isAdmin">
+            إضافة عملاء أو موردين متاحة للمدير فقط.
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;">
+            <div class="card">
+              <div class="card-header">
+                <h5>👤 إضافة عميل أو مورد</h5>
+              </div>
+              <div class="card-body">
+                <div class="form-group">
+                  <label class="form-label">الاسم</label>
+                  <input type="text" class="form-control" v-model.trim="partnerForm.name" :disabled="!isAdmin">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">النوع</label>
+                  <select class="form-control" v-model="partnerForm.type" :disabled="!isAdmin">
+                    <option value="customer">عميل</option>
+                    <option value="supplier">مورد</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">الهاتف</label>
+                  <input type="text" class="form-control" v-model.trim="partnerForm.phone" :disabled="!isAdmin">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">العنوان</label>
+                  <input type="text" class="form-control" v-model.trim="partnerForm.address" :disabled="!isAdmin">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                  <label class="form-label">ملاحظات</label>
+                  <textarea class="form-control" rows="2" v-model.trim="partnerForm.notes"
+                    :disabled="!isAdmin"></textarea>
+                </div>
+                <div style="margin-top:14px;display:flex;justify-content:flex-end;">
+                  <button class="btn btn-primary" @click="savePartner" :disabled="partnerSaving || !isAdmin">
+                    <span v-if="!partnerSaving">إضافة الطرف</span>
+                    <span v-else class="spinner" style="width:14px;height:14px;border-width:2px;"></span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-overlay" v-if="showLedgerModal" @click.self="showLedgerModal = false">
+      <div class="modal-box" style="max-width:820px;">
+        <div class="modal-header">
+          <h5>📒 كشف {{ ledgerPartner ? ledgerPartner.name : '' }}</h5>
+          <button class="btn-close" @click="showLedgerModal = false">✕</button>
+        </div>
+        <div class="modal-body">
+          <div v-if="ledgerPartner"
+            style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:14px;">
+            <div class="summary-box">
+              <div class="label">النوع</div>
+              <div class="value" style="font-size:16px;">{{ ledgerPartner.type === 'customer' ? 'عميل' : 'مورد' }}</div>
+            </div>
+            <div class="summary-box">
+              <div class="label">الرصيد الحالي</div>
+              <div class="value" :class="Number(ledgerPartner.balance) > 0 ? 'status-positive' : 'status-zero'"
+                style="font-size:16px;">
+                {{ formatMoneyValue(ledgerPartner.balance || 0) }}
+              </div>
+            </div>
+            <div class="summary-box">
+              <div class="label">الهاتف</div>
+              <div class="value" style="font-size:16px;">{{ ledgerPartner.phone || '-' }}</div>
+            </div>
+          </div>
+
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>التاريخ</th>
+                  <th>النوع</th>
+                  <th>المرجع</th>
+                  <th>المبلغ</th>
+                  <th>ملاحظات</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="!ledgerEntries.length">
+                  <td colspan="5" class="text-center" style="padding:32px;color:#94a3b8;">لا توجد حركات على هذا الطرف
+                  </td>
+                </tr>
+                <tr v-for="entry in ledgerEntries" :key="'ledger-' + entry.id">
+                  <td class="text-muted" style="font-size:12px;white-space:nowrap;">{{ formatDate(entry.created_at) }}
+                  </td>
+                  <td>{{ entry.source_type === 'document' ? formatDocumentType(entry.document_type) : 'تسوية' }}</td>
+                  <td style="direction:ltr;text-align:right;">{{ entry.document_number || '-' }}</td>
+                  <td :class="Number(entry.amount) > 0 ? 'status-positive' : 'status-zero'">{{ signedMoney(entry.amount)
+                    }}</td>
+                  <td>{{ entry.notes || '-' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-overlay" v-if="showCountDetailModal" @click.self="showCountDetailModal = false">
+      <div class="modal-box" style="max-width:900px;">
+        <div class="modal-header">
+          <h5>📋 تفاصيل الجرد {{ selectedStockCount ? selectedStockCount.count_number : '' }}</h5>
+          <button class="btn-close" @click="showCountDetailModal = false">✕</button>
+        </div>
+        <div class="modal-body">
+          <div v-if="selectedStockCount"
+            style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:14px;">
+            <div class="summary-box">
+              <div class="label">المخزن</div>
+              <div class="value" style="font-size:16px;">{{ selectedStockCount.warehouse_name || '-' }}</div>
+            </div>
+            <div class="summary-box">
+              <div class="label">المنفذ</div>
+              <div class="value" style="font-size:16px;">{{ selectedStockCount.created_by_name || '-' }}</div>
+            </div>
+            <div class="summary-box">
+              <div class="label">التاريخ</div>
+              <div class="value" style="font-size:16px;">{{ formatDate(selectedStockCount.created_at) }}</div>
+            </div>
+          </div>
+
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>الصنف</th>
+                  <th>رصيد النظام</th>
+                  <th>الفعلي</th>
+                  <th>الفرق</th>
+                  <th>فرق القيمة</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="!selectedStockCountItems.length">
+                  <td colspan="5" class="text-center" style="padding:32px;color:#94a3b8;">لا توجد تفاصيل للجرد</td>
+                </tr>
+                <tr v-for="item in selectedStockCountItems" :key="'count-item-' + item.id">
+                  <td class="fw-bold">{{ item.product_name }}</td>
+                  <td>{{ formatQty(item.system_quantity) }}</td>
+                  <td>{{ formatQty(item.actual_quantity) }}</td>
+                  <td
+                    :class="Number(item.difference_quantity) === 0 ? 'status-zero' : Number(item.difference_quantity) > 0 ? 'text-success fw-bold' : 'status-positive'">
+                    {{ signedQty(item.difference_quantity) }}
+                  </td>
+                  <td
+                    :class="Number(item.difference_value) === 0 ? 'status-zero' : Number(item.difference_value) > 0 ? 'text-success fw-bold' : 'status-positive'">
+                    {{ signedMoney(item.difference_value) }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-overlay" v-if="showDocumentDetailModal" @click.self="showDocumentDetailModal = false">
+      <div class="modal-box" style="max-width:980px;">
+        <div class="modal-header">
+          <h5>🧾 تفاصيل الإذن {{ selectedDocument ? selectedDocument.document_number : '' }}</h5>
+          <button class="btn-close" @click="showDocumentDetailModal = false">✕</button>
+        </div>
+        <div class="modal-body">
+          <div v-if="selectedDocument"
+            style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:14px;">
+            <div class="summary-box">
+              <div class="label">نوع الإذن</div>
+              <div class="value" style="font-size:16px;">{{ formatDocumentType(selectedDocument.document_type) }}</div>
+            </div>
+            <div class="summary-box">
+              <div class="label">المخزن</div>
+              <div class="value" style="font-size:16px;">{{ selectedDocument.warehouse_name || '-' }}</div>
+            </div>
+            <div class="summary-box">
+              <div class="label">الطرف</div>
+              <div class="value" style="font-size:16px;">{{ selectedDocument.partner_name || '-' }}</div>
+            </div>
+            <div class="summary-box">
+              <div class="label">أنشأه</div>
+              <div class="value" style="font-size:16px;">{{ selectedDocument.created_by_name || '-' }}</div>
+            </div>
+            <div class="summary-box">
+              <div class="label">الإجمالي</div>
+              <div class="value" style="font-size:16px;">{{ formatMoneyValue(selectedDocument.subtotal) }}</div>
+            </div>
+            <div class="summary-box">
+              <div class="label">المسدد</div>
+              <div class="value" style="font-size:16px;">{{ formatMoneyValue(selectedDocument.paid_amount) }}</div>
+            </div>
+            <div class="summary-box">
+              <div class="label">الأثر</div>
+              <div class="value" style="font-size:16px;">{{ signedMoney(selectedDocument.debt_delta) }}</div>
+            </div>
+            <div class="summary-box">
+              <div class="label">التاريخ</div>
+              <div class="value" style="font-size:16px;">{{ formatDate(selectedDocument.created_at) }}</div>
+            </div>
+          </div>
+
+          <div v-if="selectedDocument && selectedDocument.notes" class="section-note" style="margin-bottom:14px;">
+            {{ selectedDocument.notes }}
+          </div>
+
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>الصنف</th>
+                  <th>الكمية</th>
+                  <th>سعر الوحدة</th>
+                  <th>الإجمالي</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="!selectedDocumentItems.length">
+                  <td colspan="4" class="text-center" style="padding:32px;color:#94a3b8;">لا توجد أصناف لهذا الإذن</td>
+                </tr>
+                <tr v-for="item in selectedDocumentItems" :key="'doc-item-' + item.id">
+                  <td class="fw-bold">{{ item.product_name }}</td>
+                  <td>{{ formatQty(item.quantity) }}</td>
+                  <td>{{ formatMoneyValue(item.unit_price) }}</td>
+                  <td>{{ formatMoneyValue(item.line_total) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-overlay" v-if="showSettlementModal" @click.self="showSettlementModal = false">
+      <div class="modal-box" style="max-width:420px;">
+        <div class="modal-header">
+          <h5>💰 تسوية {{ settlementPartner ? settlementPartner.name : '' }}</h5>
+          <button class="btn-close" @click="showSettlementModal = false">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">القيمة</label>
+            <input type="number" class="form-control" v-model.number="settlementForm.amount" min="0.01" step="0.01"
+              style="direction:ltr;">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">ملاحظات</label>
+            <textarea class="form-control" rows="2" v-model.trim="settlementForm.notes"
+              placeholder="اختياري"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" @click="showSettlementModal = false">إلغاء</button>
+          <button class="btn btn-primary" @click="saveSettlement" :disabled="settlementSaving">
+            <span v-if="!settlementSaving">حفظ التسوية</span>
+            <span v-else class="spinner" style="width:14px;height:14px;border-width:2px;"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast-container"></div>
+  </div>
+
+  <script type="module" src="/js/app.js"></script>
+  <script type="module">
+    const { createApp, ref, computed, onMounted, nextTick } = Vue;
+    function localApi(url, opts = {}) {
+      if (typeof window.api === 'function') {
+        return window.api(url, opts);
+      }
+
+      return fetch(url, {
+        headers: { 'Content-Type': 'application/json' },
+        ...opts,
+        body: opts.body ? JSON.stringify(opts.body) : undefined,
+      })
+        .then(async (res) => {
+          if (res.status === 401) {
+            window.location.href = '/';
+            return null;
+          }
+          return res.json();
+        })
+        .catch(() => {
+          localShowToast('خطأ في الاتصال بالخادم', 'error');
+          return null;
+        });
+    }
+
+    function localShowToast(message, type = 'success') {
+      if (typeof window.showToast === 'function') {
+        window.showToast(message, type);
+        return;
+      }
+      console[type === 'error' ? 'error' : 'log'](message);
+    }
+
+    async function localGetCurrentUser() {
+      if (typeof window.getCurrentUser === 'function') {
+        return window.getCurrentUser();
+      }
+
+      const response = await localApi('/api/auth/me');
+      if (!response || !response.success) {
+        window.location.href = '/';
+        return null;
+      }
+      return response.user;
+    }
+
+    async function localGetSettings() {
+      if (typeof window.getSettings === 'function') {
+        return window.getSettings();
+      }
+
+      const response = await localApi('/api/settings');
+      return response && response.data ? response.data : {};
+    }
+
+    async function localLogout() {
+      if (typeof window.logout === 'function') {
+        return window.logout();
+      }
+
+      await localApi('/api/auth/logout', { method: 'POST' });
+      window.location.href = '/';
+    }
+
+    function localFormatDate(value) {
+      if (!value) return '-';
+      const date = new Date(value);
+      return date.toLocaleDateString('ar-EG', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      }) + ' ' + date.toLocaleTimeString('ar-EG', {
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+
+    createApp({
+      setup() {
+        const currentUser = ref(null);
+        const loadingPage = ref(false);
+        const activeSection = ref('documents');
+
+        const dashboard = ref({
+          warehouses_count: 0,
+          total_stock_quantity: 0,
+          documents_today: 0,
+          counts_today: 0,
+          customer_debt_total: 0,
+          supplier_debt_total: 0
+        });
+        const warehouses = ref([]);
+        const partners = ref([]);
+        const products = ref([]);
+        const documents = ref([]);
+        const balances = ref([]);
+        const stockCounts = ref([]);
+        const documentTypes = ref([]);
+
+        const currency = ref('ج.م');
+        const currencyPosition = ref('after');
+
+        const documentSaving = ref(false);
+        const documentError = ref('');
+        const documentFilters = ref({ type: '', search: '' });
+        const documentForm = ref(createDocumentForm());
+        const editingDocumentId = ref(null);
+        const editingDocumentNumber = ref('');
+
+        const balanceFilters = ref({ warehouse_id: '', search: '' });
+        const countFilters = ref({ warehouse_id: '', search: '' });
+        const debtFilters = ref({ type: '', search: '' });
+
+        const warehouseForm = ref({ name: '', code: '', location: '', notes: '' });
+        const warehouseSaving = ref(false);
+
+        const partnerForm = ref({ name: '', type: 'customer', phone: '', address: '', notes: '' });
+        const partnerSaving = ref(false);
+
+        const showLedgerModal = ref(false);
+        const ledgerPartner = ref(null);
+        const ledgerEntries = ref([]);
+
+        const countForm = ref(createCountForm());
+        const countSaving = ref(false);
+        const countError = ref('');
+        const showCountDetailModal = ref(false);
+        const selectedStockCount = ref(null);
+        const selectedStockCountItems = ref([]);
+        const showDocumentDetailModal = ref(false);
+        const selectedDocument = ref(null);
+        const selectedDocumentItems = ref([]);
+
+        const showSettlementModal = ref(false);
+        const settlementPartner = ref(null);
+        const settlementForm = ref({ amount: 0, notes: '' });
+        const settlementSaving = ref(false);
+
+        const documentTypeMeta = {
+          addition: { label: 'إذن إضافة', partnerType: 'supplier', debtSign: 1, partnerLabel: 'المورد' },
+          issue: { label: 'إذن صرف', partnerType: 'customer', debtSign: 1, partnerLabel: 'العميل' },
+          customer_return: { label: 'مرتجع عميل', partnerType: 'customer', debtSign: -1, partnerLabel: 'العميل' },
+          supplier_return: { label: 'مرتجع مورد', partnerType: 'supplier', debtSign: -1, partnerLabel: 'المورد' }
+        };
+
+        function createDocumentItem(item = {}) {
+          return {
+            uid: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            product_id: item.product_id ? Number(item.product_id) : null,
+            product_name: item.product_name || '',
+            linked_name: item.product_name || '',
+            barcode: item.barcode || '',
+            quantity: Number(item.quantity ?? 1) || 1,
+            unit_price: Number(item.unit_price ?? 0) || 0
+          };
+        }
+
+        function createDocumentForm() {
+          return {
+            document_type: 'addition',
+            warehouse_id: '',
+            partner_id: '',
+            paid_amount: 0,
+            notes: '',
+            items: [createDocumentItem()]
+          };
+        }
+
+        function createCountItem(item = {}) {
+          return {
+            uid: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            product_id: item.product_id ? Number(item.product_id) : null,
+            product_name: item.product_name || '',
+            linked_name: item.product_name || '',
+            barcode: item.barcode || '',
+            actual_quantity: Number(item.actual_quantity ?? 0) || 0,
+            unit_price: Number(item.unit_price ?? 0) || 0
+          };
+        }
+
+        function createCountForm() {
+          return {
+            warehouse_id: '',
+            notes: '',
+            items: [createCountItem()]
+          };
+        }
+
+        const isAdmin = computed(() => currentUser.value && currentUser.value.role === 'admin');
+        const mainWarehouseName = computed(() => {
+          const warehouse = warehouses.value[0];
+          return warehouse ? warehouse.name : 'المخزن الرئيسي';
+        });
+        const canManageWarehouseDocuments = computed(() => (
+          currentUser.value && ['admin', 'cashier'].includes(currentUser.value.role)
+        ));
+        const selectedDocumentType = computed(() => {
+          const selected = documentTypeMeta[documentForm.value.document_type] || documentTypeMeta.addition;
+          return selected;
+        });
+        const requiresPartner = computed(() => !!selectedDocumentType.value.partnerType);
+        const availablePartners = computed(() => partners.value.filter((partner) => (
+          !selectedDocumentType.value.partnerType || partner.type === selectedDocumentType.value.partnerType
+        )));
+
+        const documentSubtotal = computed(() => documentForm.value.items.reduce(
+          (sum, item) => sum + lineTotal(item),
+          0
+        ));
+
+        const documentDebtEffect = computed(() => {
+          if (!requiresPartner.value) return 0;
+          const remaining = Math.max(0, documentSubtotal.value - (Number(documentForm.value.paid_amount) || 0));
+          return remaining * (selectedDocumentType.value.debtSign || 0);
+        });
+
+        const documentDebtEffectClass = computed(() => (
+          documentDebtEffect.value > 0 ? 'status-positive' : 'status-zero'
+        ));
+
+        const documentDebtEffectLabel = computed(() => {
+          const effect = documentDebtEffect.value;
+          if (effect > 0) return `+ ${formatMoneyValue(effect)}`;
+          if (effect < 0) return `- ${formatMoneyValue(Math.abs(effect))}`;
+          return formatMoneyValue(0);
+        });
+
+        const filteredDocuments = computed(() => {
+          const q = String(documentFilters.value.search || '').trim().toLowerCase();
+          return documents.value.filter((doc) => {
+            const matchesType = !documentFilters.value.type || doc.document_type === documentFilters.value.type;
+            const haystack = `${doc.document_number || ''} ${doc.partner_name || ''} ${doc.created_by_name || ''} ${doc.item_names || ''}`.toLowerCase();
+            const matchesSearch = !q || haystack.includes(q);
+            return matchesType && matchesSearch;
+          });
+        });
+
+        const filteredBalances = computed(() => {
+          const warehouseId = Number(balanceFilters.value.warehouse_id) || null;
+          const q = String(balanceFilters.value.search || '').trim().toLowerCase();
+          return balances.value.filter((row) => {
+            const matchesWarehouse = !warehouseId || Number(row.warehouse_id) === warehouseId;
+            const haystack = `${row.product_name || ''} ${row.barcode || ''}`.toLowerCase();
+            const matchesSearch = !q || haystack.includes(q);
+            return matchesWarehouse && matchesSearch;
+          });
+        });
+
+        const filteredStockCounts = computed(() => {
+          const warehouseId = Number(countFilters.value.warehouse_id) || null;
+          const q = String(countFilters.value.search || '').trim().toLowerCase();
+          return stockCounts.value.filter((count) => {
+            const matchesWarehouse = !warehouseId || Number(count.warehouse_id) === warehouseId;
+            const haystack = `${count.count_number || ''} ${count.warehouse_name || ''}`.toLowerCase();
+            const matchesSearch = !q || haystack.includes(q);
+            return matchesWarehouse && matchesSearch;
+          });
+        });
+
+        const filteredPartners = computed(() => {
+          const q = String(debtFilters.value.search || '').trim().toLowerCase();
+          return partners.value.filter((partner) => {
+            const matchesType = !debtFilters.value.type || partner.type === debtFilters.value.type;
+            const haystack = `${partner.name || ''} ${partner.phone || ''}`.toLowerCase();
+            const matchesSearch = !q || haystack.includes(q);
+            return matchesType && matchesSearch;
+          });
+        });
+
+        const countTotalDifferenceQuantity = computed(() => countForm.value.items.reduce(
+          (sum, item) => sum + countDifference(item),
+          0
+        ));
+
+        const countTotalDifferenceValue = computed(() => countForm.value.items.reduce(
+          (sum, item) => sum + countDifferenceValue(item),
+          0
+        ));
+
+        const localNowLabel = computed(() => localFormatDate(new Date()));
+
+        function formatMoneyValue(value) {
+          const numeric = parseFloat(value || 0).toFixed(2);
+          return currencyPosition.value === 'before'
+            ? `${currency.value} ${numeric}`
+            : `${numeric} ${currency.value}`;
+        }
+
+        function formatQty(value) {
+          const numeric = Number(value || 0);
+          if (Math.abs(numeric - Math.round(numeric)) < 0.001) {
+            return String(Math.round(numeric));
+          }
+          return numeric.toFixed(3);
+        }
+
+        function signedMoney(value) {
+          const numeric = Number(value || 0);
+          if (!numeric) return formatMoneyValue(0);
+          return `${numeric > 0 ? '+' : '-'} ${formatMoneyValue(Math.abs(numeric))}`;
+        }
+
+        function signedQty(value) {
+          const numeric = Number(value || 0);
+          if (!numeric) return formatQty(0);
+          return `${numeric > 0 ? '+' : '-'} ${formatQty(Math.abs(numeric))}`;
+        }
+
+        function formatDocumentType(type) {
+          return (documentTypeMeta[type] && documentTypeMeta[type].label) || type || '-';
+        }
+
+        function canManageDocument(doc) {
+          if (!currentUser.value || !doc) return false;
+          return currentUser.value.role === 'admin' || (
+            currentUser.value.role === 'cashier' && Number(doc.created_by) === Number(currentUser.value.id)
+          );
+        }
+
+        function isManualDocument(doc) {
+          return ['addition', 'issue', 'customer_return', 'supplier_return'].includes(doc?.document_type);
+        }
+
+        function canEditDocument(doc) {
+          if (typeof doc?.can_edit === 'boolean') return doc.can_edit;
+          return Boolean(canManageWarehouseDocuments.value && canManageDocument(doc) && isManualDocument(doc));
+        }
+
+        function canDeleteDocument(doc) {
+          if (typeof doc?.can_delete === 'boolean') return doc.can_delete;
+          return Boolean(canManageWarehouseDocuments.value && canManageDocument(doc) && isManualDocument(doc));
+        }
+
+        function lineTotal(item) {
+          return (Number(item.quantity) || 0) * (Number(item.unit_price) || 0);
+        }
+
+        function findProductById(productId) {
+          return products.value.find((product) => Number(product.id) === Number(productId)) || null;
+        }
+
+        function findProductByLookup(keyword) {
+          const value = String(keyword || '').trim();
+          if (!value) return null;
+          return products.value.find((product) => (
+            product.name === value || (product.barcode && product.barcode === value)
+          )) || null;
+        }
+
+        function syncDocumentItem(item) {
+          const typedValue = String(item.product_name || '').trim();
+          const product = findProductByLookup(typedValue);
+
+          if (!product) {
+            if (typedValue !== String(item.linked_name || '').trim()) {
+              item.product_id = null;
+              item.barcode = '';
+            }
+            return;
+          }
+
+          item.product_id = Number(product.id);
+          item.product_name = product.name;
+          item.linked_name = product.name;
+          item.barcode = product.barcode || '';
+          if (!(Number(item.unit_price) > 0)) {
+            item.unit_price = Number(product.price) || 0;
+          }
+        }
+
+        function addDocumentItem() {
+          documentForm.value.items.push(createDocumentItem());
+        }
+
+        function handleDocumentTypeChange() {
+          documentForm.value.partner_id = '';
+        }
+
+        function removeDocumentItem(index) {
+          documentForm.value.items.splice(index, 1);
+          if (!documentForm.value.items.length) {
+            documentForm.value.items.push(createDocumentItem());
+          }
+        }
+
+        function getWarehouseProductBalance(warehouseId, productId) {
+          return balances.value.find((row) => (
+            Number(row.warehouse_id) === Number(warehouseId) &&
+            Number(row.product_id) === Number(productId)
+          )) || null;
+        }
+
+        function getCountSystemQuantity(item) {
+          if (!item.product_id || !countForm.value.warehouse_id) return 0;
+          const balanceRow = getWarehouseProductBalance(countForm.value.warehouse_id, item.product_id);
+          return Number((balanceRow && balanceRow.quantity) || 0);
+        }
+
+        function countDifference(item) {
+          return Number(item.actual_quantity || 0) - getCountSystemQuantity(item);
+        }
+
+        function countDifferenceValue(item) {
+          return countDifference(item) * Number(item.unit_price || 0);
+        }
+
+        function syncCountItem(item) {
+          const typedValue = String(item.product_name || '').trim();
+          const product = findProductByLookup(typedValue);
+
+          if (!product) {
+            if (typedValue !== String(item.linked_name || '').trim()) {
+              item.product_id = null;
+              item.barcode = '';
+            }
+            return;
+          }
+
+          item.product_id = Number(product.id);
+          item.product_name = product.name;
+          item.linked_name = product.name;
+          item.barcode = product.barcode || '';
+          item.unit_price = Number(product.price) || 0;
+          item.actual_quantity = getCountSystemQuantity(item);
+        }
+
+        function addCountItem() {
+          countForm.value.items.push(createCountItem());
+        }
+
+        function handleCountWarehouseChange() {
+          countForm.value.items.forEach((item) => {
+            if (item.product_id) {
+              item.actual_quantity = getCountSystemQuantity(item);
+            }
+          });
+        }
+
+        function removeCountItem(index) {
+          countForm.value.items.splice(index, 1);
+          if (!countForm.value.items.length) {
+            countForm.value.items.push(createCountItem());
+          }
+        }
+
+        async function loadSettingsData() {
+          const settings = await localGetSettings();
+          currency.value = settings.currency || 'ج.م';
+          currencyPosition.value = settings.currency_position || 'after';
+        }
+
+        async function loadMeta() {
+          const response = await localApi('/api/warehouses/meta');
+          if (!response || !response.success) return;
+
+          warehouses.value = response.data.warehouses || [];
+          partners.value = response.data.partners || [];
+          products.value = response.data.products || [];
+          documentTypes.value = response.data.document_types || [];
+
+          if (!documentForm.value.warehouse_id && warehouses.value.length) {
+            documentForm.value.warehouse_id = warehouses.value[0].id;
+          }
+          if (!countForm.value.warehouse_id && warehouses.value.length) {
+            countForm.value.warehouse_id = warehouses.value[0].id;
+          }
+        }
+
+        async function loadDashboard() {
+          const response = await localApi('/api/warehouses/dashboard');
+          if (response && response.success) {
+            dashboard.value = response.data || dashboard.value;
+          }
+        }
+
+        async function loadDocuments() {
+          const response = await localApi('/api/warehouses/documents');
+          if (response && response.success) {
+            documents.value = response.data || [];
+          }
+        }
+
+        async function loadBalances() {
+          const response = await localApi('/api/warehouses/balances');
+          if (response && response.success) {
+            balances.value = response.data || [];
+          }
+        }
+
+        async function loadPartners() {
+          const response = await localApi('/api/warehouses/partners');
+          if (response && response.success) {
+            partners.value = response.data || [];
+          }
+        }
+
+        async function loadStockCounts() {
+          const response = await localApi('/api/warehouses/stock-counts');
+          if (response && response.success) {
+            stockCounts.value = response.data || [];
+          }
+        }
+
+        async function refreshAll() {
+          loadingPage.value = true;
+          try {
+            await Promise.all([
+              loadSettingsData(),
+              loadMeta(),
+              loadDashboard(),
+              loadDocuments(),
+              loadBalances(),
+              loadPartners(),
+              loadStockCounts()
+            ]);
+          } finally {
+            loadingPage.value = false;
+          }
+        }
+
+        async function saveDocument() {
+          const preparedItems = documentForm.value.items
+            .map((item) => {
+              const typedName = String(item.product_name || '').trim();
+              const matchedProduct = findProductByLookup(typedName);
+              const keepLinked = item.product_id && typedName === String(item.linked_name || '').trim();
+
+              return {
+                product_id: matchedProduct
+                  ? Number(matchedProduct.id)
+                  : keepLinked
+                    ? Number(item.product_id)
+                    : null,
+                product_name: matchedProduct ? matchedProduct.name : typedName,
+                quantity: Number(item.quantity),
+                unit_price: Number(item.unit_price)
+              };
+            })
+            .filter((item) => item.product_name || item.quantity || item.unit_price);
+
+          if (!preparedItems.length) {
+            documentError.value = 'أضف صنفًا واحدًا على الأقل';
+            return;
+          }
+
+          const invalidItem = preparedItems.find((item) => (
+            !item.product_id ||
+            !item.product_name ||
+            !Number.isFinite(item.quantity) ||
+            item.quantity <= 0 ||
+            !Number.isFinite(item.unit_price) ||
+            item.unit_price < 0
+          ));
+
+          if (invalidItem) {
+            documentError.value = 'راجع الصنف والكمية والسعر قبل الحفظ';
+            return;
+          }
+
+          documentSaving.value = true;
+          documentError.value = '';
+
+          const endpoint = editingDocumentId.value
+            ? `/api/warehouses/documents/${editingDocumentId.value}`
+            : '/api/warehouses/documents';
+          const method = editingDocumentId.value ? 'PUT' : 'POST';
+
+          const response = await localApi(endpoint, {
+            method,
+            body: {
+              document_type: documentForm.value.document_type,
+              warehouse_id: documentForm.value.warehouse_id,
+              partner_id: requiresPartner.value ? documentForm.value.partner_id : null,
+              paid_amount: Math.max(0, Number(documentForm.value.paid_amount) || 0),
+              notes: String(documentForm.value.notes || '').trim(),
+              items: preparedItems
+            }
+          });
+
+          documentSaving.value = false;
+
+          if (!response || !response.success) {
+            documentError.value = (response && response.message) || 'تعذر حفظ الإذن';
+            return;
+          }
+
+          localShowToast(response.message || 'تم حفظ الإذن', 'success');
+          documentForm.value = createDocumentForm();
+          editingDocumentId.value = null;
+          editingDocumentNumber.value = '';
+          if (warehouses.value.length) {
+            documentForm.value.warehouse_id = warehouses.value[0].id;
+          }
+          await refreshAll();
+        }
+
+        async function startDocumentEditing(doc) {
+          if (!canEditDocument(doc)) return;
+
+          const response = await localApi(`/api/warehouses/documents/${doc.id}`);
+          if (!response || !response.success) {
+            localShowToast((response && response.message) || 'تعذر تحميل الإذن للتعديل', 'error');
+            return;
+          }
+
+          const data = response.data;
+          documentForm.value = {
+            document_type: data.document_type,
+            warehouse_id: data.warehouse_id ? Number(data.warehouse_id) : '',
+            partner_id: data.partner_id ? Number(data.partner_id) : '',
+            paid_amount: Number(data.paid_amount || 0),
+            notes: data.notes || '',
+            items: (data.items || []).map((item) => createDocumentItem({
+              product_id: item.product_id,
+              product_name: item.product_name,
+              quantity: item.quantity,
+              unit_price: item.unit_price
+            }))
+          };
+          editingDocumentId.value = doc.id;
+          editingDocumentNumber.value = doc.document_number || '';
+          activeSection.value = 'documents';
+          documentError.value = '';
+          if (typeof window.scrollTo === 'function') {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        }
+
+        function cancelDocumentEditing() {
+          documentForm.value = createDocumentForm();
+          editingDocumentId.value = null;
+          editingDocumentNumber.value = '';
+          documentError.value = '';
+          if (warehouses.value.length) {
+            documentForm.value.warehouse_id = warehouses.value[0].id;
+          }
+        }
+
+        async function deleteDocument(doc) {
+          if (!canDeleteDocument(doc)) return;
+          if (!confirm(`حذف الإذن ${doc.document_number}؟`)) return;
+
+          const response = await localApi(`/api/warehouses/documents/${doc.id}`, {
+            method: 'DELETE'
+          });
+
+          if (!response || !response.success) {
+            localShowToast((response && response.message) || 'تعذر حذف الإذن', 'error');
+            return;
+          }
+
+          if (editingDocumentId.value === doc.id) {
+            cancelDocumentEditing();
+          }
+
+          localShowToast(response.message || 'تم حذف الإذن', 'success');
+          showDocumentDetailModal.value = false;
+          await refreshAll();
+        }
+
+        async function saveStockCount() {
+          const preparedItems = countForm.value.items
+            .map((item) => {
+              const typedName = String(item.product_name || '').trim();
+              const matchedProduct = findProductByLookup(typedName);
+              const keepLinked = item.product_id && typedName === String(item.linked_name || '').trim();
+
+              return {
+                product_id: matchedProduct
+                  ? Number(matchedProduct.id)
+                  : keepLinked
+                    ? Number(item.product_id)
+                    : null,
+                product_name: matchedProduct ? matchedProduct.name : typedName,
+                actual_quantity: Number(item.actual_quantity),
+                unit_price: Number(item.unit_price)
+              };
+            })
+            .filter((item) => item.product_name || item.actual_quantity || item.unit_price || item.product_id);
+
+          if (!preparedItems.length) {
+            countError.value = 'أضف صنفًا واحدًا على الأقل إلى الجرد';
+            return;
+          }
+
+          const invalidItem = preparedItems.find((item) => (
+            !item.product_id ||
+            !item.product_name ||
+            !Number.isFinite(item.actual_quantity) ||
+            item.actual_quantity < 0 ||
+            !Number.isFinite(item.unit_price) ||
+            item.unit_price < 0
+          ));
+
+          if (!countForm.value.warehouse_id) {
+            countError.value = 'المخزن الرئيسي غير متاح';
+            return;
+          }
+
+          if (invalidItem) {
+            countError.value = 'راجع بيانات أصناف الجرد قبل الحفظ';
+            return;
+          }
+
+          countSaving.value = true;
+          countError.value = '';
+
+          const response = await localApi('/api/warehouses/stock-counts', {
+            method: 'POST',
+            body: {
+              warehouse_id: countForm.value.warehouse_id,
+              notes: String(countForm.value.notes || '').trim(),
+              items: preparedItems
+            }
+          });
+
+          countSaving.value = false;
+
+          if (!response || !response.success) {
+            countError.value = (response && response.message) || 'تعذر حفظ الجرد';
+            return;
+          }
+
+          localShowToast(response.message || 'تم حفظ الجرد', 'success');
+          countForm.value = createCountForm();
+          if (warehouses.value.length) {
+            countForm.value.warehouse_id = warehouses.value[0].id;
+          }
+          await refreshAll();
+        }
+
+        async function saveWarehouse() {
+          warehouseSaving.value = true;
+          const response = await localApi('/api/warehouses/warehouses', {
+            method: 'POST',
+            body: warehouseForm.value
+          });
+          warehouseSaving.value = false;
+
+          if (!response || !response.success) {
+            localShowToast((response && response.message) || 'تعذر إضافة المخزن', 'error');
+            return;
+          }
+
+          localShowToast(response.message || 'تمت إضافة المخزن', 'success');
+          warehouseForm.value = { name: '', code: '', location: '', notes: '' };
+          await refreshAll();
+        }
+
+        async function savePartner() {
+          partnerSaving.value = true;
+          const response = await localApi('/api/warehouses/partners', {
+            method: 'POST',
+            body: partnerForm.value
+          });
+          partnerSaving.value = false;
+
+          if (!response || !response.success) {
+            localShowToast((response && response.message) || 'تعذر إضافة الطرف', 'error');
+            return;
+          }
+
+          localShowToast(response.message || 'تمت إضافة الطرف', 'success');
+          partnerForm.value = { name: '', type: 'customer', phone: '', address: '', notes: '' };
+          await refreshAll();
+        }
+
+        async function openLedger(partner) {
+          const response = await localApi(`/api/warehouses/partners/${partner.id}/ledger`);
+          if (!response || !response.success) {
+            localShowToast((response && response.message) || 'تعذر تحميل الكشف', 'error');
+            return;
+          }
+
+          ledgerPartner.value = response.data.partner;
+          ledgerEntries.value = response.data.ledger || [];
+          showLedgerModal.value = true;
+        }
+
+        async function openStockCountDetail(countId) {
+          const response = await localApi(`/api/warehouses/stock-counts/${countId}`);
+          if (!response || !response.success) {
+            localShowToast((response && response.message) || 'تعذر تحميل تفاصيل الجرد', 'error');
+            return;
+          }
+
+          selectedStockCount.value = response.data;
+          selectedStockCountItems.value = response.data.items || [];
+          showCountDetailModal.value = true;
+        }
+
+        async function openDocumentDetail(documentId) {
+          const response = await localApi(`/api/warehouses/documents/${documentId}`);
+          if (!response || !response.success) {
+            localShowToast((response && response.message) || 'تعذر تحميل تفاصيل الإذن', 'error');
+            return;
+          }
+
+          selectedDocument.value = response.data;
+          selectedDocumentItems.value = response.data.items || [];
+          showDocumentDetailModal.value = true;
+        }
+
+        function openSettlement(partner) {
+          settlementPartner.value = partner;
+          settlementForm.value = {
+            amount: Number(partner.balance) > 0 ? Number(partner.balance) : 0,
+            notes: ''
+          };
+          showSettlementModal.value = true;
+        }
+
+        async function saveSettlement() {
+          if (!settlementPartner.value) return;
+
+          settlementSaving.value = true;
+          const response = await localApi(`/api/warehouses/partners/${settlementPartner.value.id}/settlements`, {
+            method: 'POST',
+            body: settlementForm.value
+          });
+          settlementSaving.value = false;
+
+          if (!response || !response.success) {
+            localShowToast((response && response.message) || 'تعذر حفظ التسوية', 'error');
+            return;
+          }
+
+          localShowToast(response.message || 'تم حفظ التسوية', 'success');
+          showSettlementModal.value = false;
+          await refreshAll();
+
+          if (showLedgerModal.value && ledgerPartner.value && ledgerPartner.value.id === settlementPartner.value.id) {
+            await openLedger(settlementPartner.value);
+          }
+        }
+
+        function doLogout() {
+          if (confirm('تسجيل الخروج؟')) localLogout();
+        }
+
+        onMounted(async () => {
+          currentUser.value = await localGetCurrentUser();
+          await refreshAll();
+
+          // ضيف الكود ده بعد ما البيانات بتتحمل
+          if (currentUser.value) {
+            await nextTick(); // استنى لحد ما Vue يخلص التحديثات
+
+            const avatarEl = document.getElementById('sidebar-avatar');
+            const usernameEl = document.getElementById('sidebar-username');
+
+            const displayName = currentUser.value.full_name || currentUser.value.username || currentUser.value.name || 'مستخدم';
+
+            if (avatarEl && displayName) {
+              avatarEl.textContent = displayName.charAt(0).toUpperCase();
+            }
+
+            if (usernameEl) {
+              usernameEl.textContent = displayName;
+            }
+          }
+        });
+
+
+        return {
+          currentUser,
+          loadingPage,
+          activeSection,
+          dashboard,
+          warehouses,
+          mainWarehouseName,
+          partners,
+          products,
+          documents,
+          balances,
+          stockCounts,
+          documentTypes,
+          documentForm,
+          editingDocumentId,
+          editingDocumentNumber,
+          documentSaving,
+          documentError,
+          documentFilters,
+          balanceFilters,
+          countFilters,
+          debtFilters,
+          warehouseForm,
+          warehouseSaving,
+          partnerForm,
+          partnerSaving,
+          showLedgerModal,
+          ledgerPartner,
+          ledgerEntries,
+          countForm,
+          countSaving,
+          countError,
+          showCountDetailModal,
+          selectedStockCount,
+          selectedStockCountItems,
+          showDocumentDetailModal,
+          selectedDocument,
+          selectedDocumentItems,
+          showSettlementModal,
+          settlementPartner,
+          settlementForm,
+          settlementSaving,
+          isAdmin,
+          canManageWarehouseDocuments,
+          selectedDocumentType,
+          requiresPartner,
+          availablePartners,
+          documentSubtotal,
+          documentDebtEffectClass,
+          documentDebtEffectLabel,
+          filteredDocuments,
+          filteredBalances,
+          filteredStockCounts,
+          filteredPartners,
+          countTotalDifferenceQuantity,
+          countTotalDifferenceValue,
+          localNowLabel,
+          formatMoneyValue,
+          formatQty,
+          signedMoney,
+          signedQty,
+          formatDate: localFormatDate,
+          formatDocumentType,
+          canManageDocument,
+          canEditDocument,
+          canDeleteDocument,
+          lineTotal,
+          findProductById,
+          getCountSystemQuantity,
+          countDifference,
+          countDifferenceValue,
+          syncDocumentItem,
+          addDocumentItem,
+          handleDocumentTypeChange,
+          removeDocumentItem,
+          syncCountItem,
+          addCountItem,
+          handleCountWarehouseChange,
+          removeCountItem,
+          refreshAll,
+          saveDocument,
+          startDocumentEditing,
+          cancelDocumentEditing,
+          deleteDocument,
+          saveStockCount,
+          saveWarehouse,
+          savePartner,
+          openLedger,
+          openStockCountDetail,
+          openDocumentDetail,
+          openSettlement,
+          saveSettlement,
+          doLogout
+        };
+      }
+    }).mount('#app');
+  </script>
+</body>
+
+</html>

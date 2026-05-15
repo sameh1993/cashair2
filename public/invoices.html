@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>الفواتير | نظام الكاشير</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <style>
+    .stat-card-action {
+      cursor: pointer;
+      transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    }
+    .stat-card-action:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 14px 28px rgba(15, 23, 42, .10);
+      border-color: #bfdbfe;
+    }
+    .stat-card-action.active {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);
+    }
+    .quick-filter-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding: 12px 14px;
+      margin-bottom: 14px;
+      border: 1px solid #dbeafe;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #f8fbff 0%, #eef6ff 100%);
+    }
+    .quick-filter-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #1e3a8a;
+    }
+    .quick-filter-subtitle {
+      font-size: 12px;
+      color: #64748b;
+      margin-top: 4px;
+    }
+    .quick-filter-metrics {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .quick-filter-pill {
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: #fff;
+      border: 1px solid #dbeafe;
+      font-size: 12.5px;
+      font-weight: 700;
+      color: #0f172a;
+    }
+  </style>
+</head>
+<body>
+<div id="app" class="app-layout" v-cloak>
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">🛒</div>
+      <div><div class="logo-text">نظام الكاشير</div><div class="logo-sub">الفواتير</div></div>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="/pos"      class="nav-item"><span class="nav-icon">💰</span> الكاشير</a>
+      <a href="/products" class="nav-item"><span class="nav-icon">📦</span> المنتجات</a>
+      <a href="/low-stock" class="nav-item"><span class="nav-icon">🚨</span> قرب النفاد</a>
+      <a href="/invoices" class="nav-item active"><span class="nav-icon">🧾</span> الفواتير</a>
+      <a href="/warehouses" class="nav-item"><span class="nav-icon">🏬</span> المخازن</a>
+      <a href="/settings" class="nav-item"><span class="nav-icon">⚙️</span> الإعدادات</a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-info">
+        <div class="user-avatar" id="sidebar-avatar">A</div>
+        <div style="min-width:0;flex:1;">
+          <div style="color:#e2e8f0;font-size:13px;font-weight:600;" id="sidebar-username">...</div>
+          <div style="font-size:11px;cursor:pointer;" @click="doLogout">تسجيل خروج</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-title">🧾 الفواتير</div>
+    </div>
+    <div class="page-body">
+
+      <!-- Stats row -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:18px;">
+        <div
+          class="stat-card stat-card-action"
+          :class="{ active: activeQuickFilter === 'today-invoices' }"
+          role="button"
+          tabindex="0"
+          @click="applyTodayInvoicesFilter"
+          @keyup.enter="applyTodayInvoicesFilter"
+        >
+          <div class="stat-value" style="color:var(--primary);">{{ todayStats.invoices_count || 0 }}</div>
+          <div class="stat-label">{{ isCashier ? 'فواتيرك اليوم' : 'فواتير اليوم' }}</div>
+        </div>
+        <div
+          class="stat-card stat-card-action"
+          :class="{ active: activeQuickFilter === 'today-sales' }"
+          role="button"
+          tabindex="0"
+          @click="applyTodaySalesFilter"
+          @keyup.enter="applyTodaySalesFilter"
+        >
+          <div class="stat-value" style="color:var(--success);">{{ formatMoney(todayStats.total_sales || 0) }}</div>
+          <div class="stat-label">{{ isCashier ? 'إيرادك اليوم' : 'مبيعات اليوم' }}</div>
+        </div>
+        <div
+          class="stat-card stat-card-action"
+          :class="{ active: activeQuickFilter === 'all' }"
+          role="button"
+          tabindex="0"
+          @click="showAllInvoices"
+          @keyup.enter="showAllInvoices"
+        >
+          <div class="stat-value" style="color:var(--warning);">{{ total }}</div>
+          <div class="stat-label">{{ isCashier ? 'إجمالي فواتيرك' : 'إجمالي الفواتير' }}</div>
+        </div>
+      </div>
+
+      <!-- Filters -->
+      <div class="card" style="margin-bottom:14px;">
+        <div class="card-body">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+            <div class="form-group" style="margin:0;flex:1;min-width:150px;">
+              <label class="form-label">بحث برقم الفاتورة</label>
+              <input type="text" class="form-control" v-model="searchQuery" placeholder="INV-..." style="direction:ltr;">
+            </div>
+            <div class="form-group" style="margin:0;">
+              <label class="form-label">من تاريخ</label>
+              <input type="date" class="form-control" v-model="fromDate" style="direction:ltr;">
+            </div>
+            <div class="form-group" style="margin:0;">
+              <label class="form-label">إلى تاريخ</label>
+              <input type="date" class="form-control" v-model="toDate" style="direction:ltr;">
+            </div>
+            <button class="btn btn-primary" @click="loadInvoices(1)">🔍 بحث</button>
+            <button class="btn btn-outline" @click="resetFilters">مسح</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="card">
+        <div class="quick-filter-bar" v-if="activeQuickFilter">
+          <div>
+            <div class="quick-filter-title">{{ quickFilterTitle }}</div>
+            <div class="quick-filter-subtitle">
+              {{ activeQuickFilter === 'all' ? 'عرض كل النتائج المتاحة لك' : `عرض فواتير يوم ${fromDate}` }}
+            </div>
+          </div>
+          <div class="quick-filter-metrics">
+            <span class="quick-filter-pill">الإجمالي: {{ formatMoney(visibleNetTotal) }}</span>
+            <span class="quick-filter-pill">المدفوعات: {{ formatMoney(visiblePaidTotal) }}</span>
+            <span class="quick-filter-pill">باقي العميل: {{ formatMoney(visibleChangeTotal) }}</span>
+          </div>
+          <button class="btn btn-sm btn-outline" @click="resetFilters">مسح الفلتر</button>
+        </div>
+
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>رقم الفاتورة</th>
+                <th>التاريخ</th>
+                <th>الأصناف</th>
+                <th>الإجمالي</th>
+                <th>المدفوع</th>
+                <th>الباقي</th>
+                <th>طريقة الدفع</th>
+                <th>الكاشير</th>
+                <th>إجراءات</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="loading">
+                <td colspan="9" class="text-center" style="padding:40px;">
+                  <span class="spinner" style="width:24px;height:24px;border-color:#e2e8f0;border-top-color:var(--primary);"></span>
+                </td>
+              </tr>
+              <tr v-else-if="!invoices.length">
+                <td colspan="9" class="text-center" style="padding:40px;color:#94a3b8;">لا توجد فواتير</td>
+              </tr>
+              <tr v-for="inv in invoices" :key="inv.id">
+                <td style="direction:ltr;text-align:right;font-weight:700;font-size:12px;color:var(--primary);">{{ inv.invoice_number }}</td>
+                <td style="font-size:12px;color:#64748b;white-space:nowrap;">{{ formatDate(inv.created_at) }}</td>
+                <td class="text-center">{{ inv.items_count }}</td>
+                <td class="fw-bold">{{ formatMoney(inv.net_total) }}</td>
+                <td>{{ formatMoney(inv.paid_amount) }}</td>
+                <td :style="inv.change_amount > 0 ? 'color:var(--success);font-weight:600' : ''">
+                  {{ formatMoney(inv.change_amount) }}
+                </td>
+                <td>
+                  <span :class="inv.payment_method === 'cash' ? 'badge badge-success' : inv.payment_method === 'card' ? 'badge badge-info' : 'badge badge-gray'">
+                    {{ inv.payment_method === 'cash' ? '💵 نقدي' : inv.payment_method === 'card' ? '💳 بطاقة' : 'أخرى' }}
+                  </span>
+                </td>
+                <td class="text-muted" style="font-size:12px;">{{ inv.cashier_name || '-' }}</td>
+                <td>
+                  <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;">
+                    <button class="btn btn-sm btn-outline" @click="viewInvoice(inv.id)">عرض</button>
+                    <button class="btn btn-sm btn-primary" @click="openEditInvoice(inv.id)">تعديل</button>
+                    <button
+                      class="btn btn-sm btn-danger"
+                      @click="deleteInvoice(inv)"
+                      :disabled="deletingInvoiceId === inv.id"
+                    >
+                      <span v-if="deletingInvoiceId !== inv.id">حذف</span>
+                      <span v-else class="spinner" style="width:12px;height:12px;border-width:2px;"></span>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination -->
+        <div style="padding:14px 18px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid #f1f5f9;" v-if="total > limit">
+          <span style="font-size:13px;color:#64748b;">{{ total }} فاتورة إجمالاً</span>
+          <div style="display:flex;gap:4px;">
+            <button class="btn btn-sm btn-outline" :disabled="currentPage <= 1" @click="loadInvoices(currentPage-1)">السابق</button>
+            <button class="btn btn-sm btn-outline" :disabled="currentPage * limit >= total" @click="loadInvoices(currentPage+1)">التالي</button>
+          </div>
+        </div>
+      </div>
+    </div>
+</div>
+
+  <div id="invoice-receipt" class="thermal-print-root" v-if="selectedInvoice">
+    <div class="receipt-shell">
+      <div class="receipt-brand-mark"></div>
+      <div class="receipt-header">
+        <h2>{{ shopName || 'المحل' }}</h2>
+        <p class="receipt-subtitle">فاتورة بيع نقدي</p>
+      </div>
+      <div class="receipt-meta-grid">
+        <div class="receipt-meta-row">
+          <span>رقم الفاتورة</span>
+          <strong>{{ selectedInvoice.invoice_number }}</strong>
+        </div>
+        <div class="receipt-meta-row">
+          <span>التاريخ</span>
+          <strong>{{ formatDate(selectedInvoice.created_at) }}</strong>
+        </div>
+        <div class="receipt-meta-row">
+          <span>الكاشير</span>
+          <strong>{{ selectedInvoice.cashier_name || '-' }}</strong>
+        </div>
+        <div class="receipt-meta-row">
+          <span>الدفع</span>
+          <strong>{{ paymentMethodLabel(selectedInvoice.payment_method) }}</strong>
+        </div>
+      </div>
+      <hr class="receipt-divider">
+      <table class="receipt-table">
+        <thead>
+          <tr>
+            <th>الصنف</th>
+            <th>ك</th>
+            <th>سعر</th>
+            <th>إجمالي</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="item in selectedInvoice.items" :key="'print-' + item.id">
+            <td class="receipt-item-name">{{ item.product_name }}</td>
+            <td>{{ item.quantity }}</td>
+            <td>{{ formatMoney(item.unit_price) }}</td>
+            <td>{{ formatMoney(item.subtotal) }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <hr class="receipt-divider">
+      <div class="receipt-summary">
+        <div class="receipt-summary-row">
+          <span>المجموع</span>
+          <strong>{{ formatMoney(selectedInvoice.total) }}</strong>
+        </div>
+        <div class="receipt-summary-row" v-if="selectedInvoice.discount > 0">
+          <span>الخصم</span>
+          <strong>- {{ formatMoney(selectedInvoice.discount) }}</strong>
+        </div>
+        <div class="receipt-summary-row receipt-summary-grand">
+          <span>الإجمالي النهائي</span>
+          <strong>{{ formatMoney(selectedInvoice.net_total) }}</strong>
+        </div>
+        <div class="receipt-summary-row">
+          <span>المدفوع</span>
+          <strong>{{ formatMoney(selectedInvoice.paid_amount) }}</strong>
+        </div>
+        <div class="receipt-summary-row receipt-summary-change" v-if="selectedInvoice.change_amount > 0">
+          <span>الباقي</span>
+          <strong>{{ formatMoney(selectedInvoice.change_amount) }}</strong>
+        </div>
+      </div>
+      <hr class="receipt-divider">
+      <div class="receipt-footer">{{ receiptFooter || 'شكراً لزيارتكم' }}</div>
+      <div class="receipt-footer-note">نتشرف بخدمتكم مرة أخرى</div>
+    </div>
+  </div>
+
+  <!-- Invoice Detail Modal -->
+  <div class="modal-overlay" v-if="showDetail" @click.self="showDetail=false">
+    <div class="modal-box" style="max-width:600px;">
+      <div class="modal-header">
+        <h5>🧾 فاتورة {{ selectedInvoice?.invoice_number }}</h5>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-sm btn-primary" @click="openEditInvoice(selectedInvoice.id)">تعديل</button>
+          <button
+            class="btn btn-sm btn-danger"
+            @click="deleteInvoice(selectedInvoice)"
+            :disabled="deletingInvoiceId === selectedInvoice.id"
+          >
+            حذف
+          </button>
+          <button class="btn btn-sm btn-outline" @click="printInvoice">🖨 طباعة</button>
+          <button class="btn-close" @click="showDetail=false">✕</button>
+        </div>
+      </div>
+      <div class="modal-body" v-if="selectedInvoice" id="printArea">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;font-size:13px;">
+          <div><span class="text-muted">رقم الفاتورة: </span><strong style="direction:ltr;">{{ selectedInvoice.invoice_number }}</strong></div>
+          <div><span class="text-muted">التاريخ: </span><strong>{{ formatDate(selectedInvoice.created_at) }}</strong></div>
+          <div><span class="text-muted">الكاشير: </span><strong>{{ selectedInvoice.cashier_name || '-' }}</strong></div>
+          <div><span class="text-muted">طريقة الدفع: </span><strong>{{ paymentMethodLabel(selectedInvoice.payment_method) }}</strong></div>
+        </div>
+
+        <table class="data-table" style="margin-bottom:12px;">
+          <thead>
+            <tr>
+              <th>المنتج</th>
+              <th class="text-center">الكمية</th>
+              <th>سعر الوحدة</th>
+              <th>الإجمالي</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in selectedInvoice.items" :key="item.id">
+              <td class="fw-bold">{{ item.product_name }}</td>
+              <td class="text-center">{{ item.quantity }}</td>
+              <td>{{ formatMoney(item.unit_price) }}</td>
+              <td class="fw-bold" style="color:var(--primary);">{{ formatMoney(item.subtotal) }}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div style="border-top:2px solid #e2e8f0;padding-top:12px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:14px;">
+            <span class="text-muted">المجموع:</span>
+            <span class="fw-bold">{{ formatMoney(selectedInvoice.total) }}</span>
+          </div>
+          <div v-if="selectedInvoice.discount > 0" style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:14px;color:var(--danger);">
+            <span>الخصم:</span>
+            <span class="fw-bold">- {{ formatMoney(selectedInvoice.discount) }}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:18px;color:var(--primary);">
+            <span class="fw-bold">الإجمالي:</span>
+            <span class="fw-800">{{ formatMoney(selectedInvoice.net_total) }}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:13px;color:#64748b;">
+            <span>المدفوع: {{ formatMoney(selectedInvoice.paid_amount) }}</span>
+            <span>الباقي: {{ formatMoney(selectedInvoice.change_amount) }}</span>
+          </div>
+          <div v-if="selectedInvoice.notes" style="margin-top:12px;padding-top:12px;border-top:1px dashed #cbd5e1;font-size:13px;color:#475569;">
+            <span class="text-muted">ملاحظات:</span>
+            <div style="margin-top:4px;">{{ selectedInvoice.notes }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" v-if="showEdit" @click.self="closeEditModal">
+    <div class="modal-box" style="max-width:980px;">
+      <div class="modal-header">
+        <h5>تعديل الفاتورة {{ editInvoice.invoice_number ? '# ' + editInvoice.invoice_number : '' }}</h5>
+        <button class="btn-close" @click="closeEditModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px;">
+          <div class="form-group" style="margin:0;">
+            <label class="form-label">طريقة الدفع</label>
+            <select class="form-control" v-model="editInvoice.payment_method">
+              <option value="cash">نقدي</option>
+              <option value="card">بطاقة</option>
+              <option value="other">أخرى</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label class="form-label">الخصم</label>
+            <input type="number" class="form-control" v-model.number="editInvoice.discount" min="0" step="0.01" style="direction:ltr;">
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label class="form-label">المدفوع</label>
+            <input type="number" class="form-control" v-model.number="editInvoice.paid_amount" min="0" step="0.01" style="direction:ltr;">
+          </div>
+          <div class="form-group" style="margin:0;grid-column:1/-1;">
+            <label class="form-label">ملاحظات</label>
+            <textarea class="form-control" v-model.trim="editInvoice.notes" rows="2" placeholder="اختياري"></textarea>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+          <div class="text-muted" style="font-size:12px;">
+            يمكنك كتابة اسم المنتج أو اختيار باركوده من القائمة المقترحة.
+          </div>
+          <button class="btn btn-sm btn-outline" @click="addEditItem">+ إضافة صنف</button>
+        </div>
+
+        <div class="table-wrapper" style="margin-bottom:14px;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>الصنف</th>
+                <th>الكمية</th>
+                <th>سعر الوحدة</th>
+                <th>الإجمالي</th>
+                <th>حذف</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="!editInvoice.items.length">
+                <td colspan="5" class="text-center" style="padding:28px;color:#94a3b8;">لا توجد أصناف في الفاتورة</td>
+              </tr>
+              <tr v-for="(item, index) in editInvoice.items" :key="item.uid">
+                <td style="min-width:280px;">
+                  <input
+                    type="text"
+                    class="form-control"
+                    v-model.trim="item.product_name"
+                    list="invoice-products-list"
+                    placeholder="اسم المنتج أو الباركود"
+                    @change="syncEditItemProduct(item)"
+                    @blur="syncEditItemProduct(item)"
+                  >
+                  <div v-if="findProductStock(item.product_id) !== null" class="text-muted" style="font-size:11px;margin-top:4px;">
+                    المخزون الحالي: {{ findProductStock(item.product_id) }}
+                  </div>
+                </td>
+                <td style="min-width:140px;">
+                  <input type="number" class="form-control" v-model.number="item.quantity" min="0.001" step="0.001" style="direction:ltr;">
+                </td>
+                <td style="min-width:160px;">
+                  <input type="number" class="form-control" v-model.number="item.unit_price" min="0" step="0.01" style="direction:ltr;">
+                </td>
+                <td class="fw-bold" style="color:var(--primary);white-space:nowrap;">
+                  {{ formatMoney(editLineSubtotal(item)) }}
+                </td>
+                <td>
+                  <button class="btn btn-sm btn-danger" @click="removeEditItem(index)">حذف</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <datalist id="invoice-products-list">
+          <option v-for="p in productsCatalog" :key="'prod-name-' + p.id" :value="p.name">{{ p.barcode || '' }}</option>
+          <option v-for="p in barcodeProducts" :key="'prod-code-' + p.id" :value="p.barcode">{{ p.name }}</option>
+        </datalist>
+
+        <div v-if="editError" style="background:#fee2e2;color:#b91c1c;border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:13px;">
+          {{ editError }}
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;">
+          <div style="width:100%;max-width:320px;border:1px solid #e2e8f0;border-radius:14px;padding:14px 16px;background:#f8fafc;">
+            <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+              <span class="text-muted">قيمة الفاتورة</span>
+              <strong>{{ formatMoney(editInvoiceTotal) }}</strong>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:8px;color:var(--danger);">
+              <span>الخصم</span>
+              <strong>- {{ formatMoney(editInvoice.discount || 0) }}</strong>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:20px;color:var(--primary);">
+              <span class="fw-bold">الإجمالي</span>
+              <strong>{{ formatMoney(editInvoiceNetTotal) }}</strong>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px;color:#64748b;">
+              <span>المدفوع</span>
+              <span>{{ formatMoney(editInvoice.paid_amount || 0) }}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:13px;" :style="editInvoiceRemaining > 0 ? 'color:var(--warning);font-weight:700;' : 'color:var(--success);font-weight:700;'">
+              <span>{{ editInvoiceRemaining > 0 ? 'المتبقي' : 'الباقي' }}</span>
+              <span>{{ formatMoney(editInvoiceRemaining > 0 ? editInvoiceRemaining : editInvoiceChange) }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" @click="closeEditModal">إلغاء</button>
+        <button class="btn btn-primary" @click="saveInvoiceEdit" :disabled="editSaving">
+          <span v-if="!editSaving">حفظ التعديل</span>
+          <span v-else class="spinner" style="width:14px;height:14px;border-width:2px;"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+const { createApp, ref, onMounted, computed } = Vue;
+
+createApp({
+  setup() {
+    const currentUser = ref(null);
+    const invoices = ref([]);
+    const loading  = ref(true);
+    const total    = ref(0);
+    const currentPage = ref(1);
+    const limit    = ref(20);
+    const searchQuery = ref('');
+    const fromDate = ref('');
+    const toDate   = ref('');
+    const todayStats = ref({});
+    const currency   = ref('ج.م');
+    const curPos     = ref('after');
+    const shopName   = ref('');
+    const receiptFooter = ref('شكراً لزيارتكم');
+    const showDetail = ref(false);
+    const selectedInvoice = ref(null);
+    const showEdit = ref(false);
+    const editSaving = ref(false);
+    const deletingInvoiceId = ref(null);
+    const editError = ref('');
+    const productsCatalog = ref([]);
+    const reopenDetailAfterEdit = ref(false);
+    const activeQuickFilter = ref('');
+    const editInvoice = ref(createEditDraft());
+    const isCashier = computed(() => currentUser.value?.role === 'cashier');
+    const barcodeProducts = computed(() => productsCatalog.value.filter((product) => product.barcode));
+
+    function createEditItem(item = {}) {
+      return {
+        uid: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        product_id: item.product_id ? Number(item.product_id) : null,
+        product_name: item.product_name || '',
+        linked_name: item.product_name || '',
+        barcode: item.barcode || '',
+        quantity: Number(item.quantity ?? 1) || 1,
+        unit_price: Number(item.unit_price ?? 0) || 0
+      };
+    }
+
+    function createEditDraft(invoice = {}) {
+      const invoiceNetTotal = Math.max(0, Number(invoice.net_total) || 0);
+      const existingPaidAmount = Number(invoice.paid_amount) || 0;
+
+      return {
+        id: invoice.id || null,
+        invoice_number: invoice.invoice_number || '',
+        payment_method: invoice.payment_method || 'cash',
+        discount: Number(invoice.discount) || 0,
+        paid_amount: invoice.paid_amount === undefined || invoice.paid_amount === null || invoice.paid_amount === ''
+          ? invoiceNetTotal
+          : Math.max(invoiceNetTotal, existingPaidAmount),
+        notes: invoice.notes || '',
+        items: Array.isArray(invoice.items) ? invoice.items.map(createEditItem) : []
+      };
+    }
+
+    const editInvoiceTotal = computed(() => (
+      editInvoice.value.items.reduce((sum, item) => sum + editLineSubtotal(item), 0)
+    ));
+
+    const editInvoiceNetTotal = computed(() => (
+      Math.max(0, editInvoiceTotal.value - (Number(editInvoice.value.discount) || 0))
+    ));
+
+    const editInvoiceChange = computed(() => (
+      Math.max(0, (Number(editInvoice.value.paid_amount) || 0) - editInvoiceNetTotal.value)
+    ));
+
+    const editInvoiceRemaining = computed(() => (
+      Math.max(0, editInvoiceNetTotal.value - (Number(editInvoice.value.paid_amount) || 0))
+    ));
+
+    const visibleNetTotal = computed(() => (
+      invoices.value.reduce((sum, invoice) => sum + (Number(invoice.net_total) || 0), 0)
+    ));
+
+    const visiblePaidTotal = computed(() => (
+      invoices.value.reduce((sum, invoice) => sum + (Number(invoice.paid_amount) || 0), 0)
+    ));
+
+    const visibleChangeTotal = computed(() => (
+      invoices.value.reduce((sum, invoice) => sum + (Number(invoice.change_amount) || 0), 0)
+    ));
+
+    const quickFilterTitle = computed(() => {
+      if (activeQuickFilter.value === 'today-sales') {
+        return isCashier.value ? 'إيرادك اليوم وفواتيرك' : 'مبيعات اليوم وفواتيره';
+      }
+      if (activeQuickFilter.value === 'today-invoices') {
+        return isCashier.value ? 'فواتيرك اليوم' : 'فواتير اليوم';
+      }
+      if (activeQuickFilter.value === 'all') {
+        return isCashier.value ? 'كل فواتيرك' : 'كل الفواتير';
+      }
+      return '';
+    });
+
+    function formatMoney(v) {
+      const val = parseFloat(v || 0).toFixed(2);
+      return curPos.value === 'before' ? `${currency.value} ${val}` : `${val} ${currency.value}`;
+    }
+
+    function formatDate(s) {
+      if (!s) return '-';
+      return new Date(s).toLocaleDateString('ar-EG', {
+        year: 'numeric', month: 'short', day: 'numeric',
+        hour: '2-digit', minute: '2-digit'
+      });
+    }
+
+    function paymentMethodLabel(method) {
+      return method === 'cash' ? 'نقدي' : method === 'card' ? 'بطاقة' : 'أخرى';
+    }
+
+    function getLocalDateValue() {
+      const now = new Date();
+      const timezoneAdjusted = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+      return timezoneAdjusted.toISOString().slice(0, 10);
+    }
+
+    function focusInvoicesTable() {
+      requestAnimationFrame(() => {
+        document.querySelector('.data-table')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
+
+    function editLineSubtotal(item) {
+      const quantity = Number(item.quantity) || 0;
+      const unitPrice = Number(item.unit_price) || 0;
+      return quantity * unitPrice;
+    }
+
+    async function loadInvoices(page = 1) {
+      currentPage.value = page;
+      loading.value = true;
+      const params = new URLSearchParams({ page, limit: limit.value });
+      if (searchQuery.value) params.append('search', searchQuery.value);
+      if (fromDate.value) params.append('from', fromDate.value);
+      if (toDate.value)   params.append('to', toDate.value);
+      const r = await fetch('/api/invoices?' + params);
+      const d = await r.json();
+      if (d.success) { invoices.value = d.data; total.value = d.total; }
+      loading.value = false;
+    }
+
+    async function loadProductsCatalog() {
+      if (productsCatalog.value.length) return;
+      const r = await fetch('/api/products');
+      const d = await r.json();
+      if (d.success) productsCatalog.value = d.data;
+    }
+
+    function resetFilters() {
+      searchQuery.value = ''; fromDate.value = ''; toDate.value = '';
+      activeQuickFilter.value = '';
+      loadInvoices(1);
+    }
+
+    async function applyTodayInvoicesFilter() {
+      const today = getLocalDateValue();
+      fromDate.value = today;
+      toDate.value = today;
+      activeQuickFilter.value = 'today-invoices';
+      await loadInvoices(1);
+      focusInvoicesTable();
+    }
+
+    async function applyTodaySalesFilter() {
+      const today = getLocalDateValue();
+      fromDate.value = today;
+      toDate.value = today;
+      activeQuickFilter.value = 'today-sales';
+      await loadInvoices(1);
+      focusInvoicesTable();
+    }
+
+    async function showAllInvoices() {
+      searchQuery.value = '';
+      fromDate.value = '';
+      toDate.value = '';
+      activeQuickFilter.value = 'all';
+      await loadInvoices(1);
+      focusInvoicesTable();
+    }
+
+    async function loadTodayStats() {
+      const r = await fetch('/api/invoices/stats/today');
+      const d = await r.json();
+      if (d.success) todayStats.value = d.data;
+    }
+
+    async function viewInvoice(id) {
+      const r = await fetch(`/api/invoices/${id}`);
+      const d = await r.json();
+      if (d.success) { selectedInvoice.value = d.data; showDetail.value = true; }
+    }
+
+    function addEditItem() {
+      editInvoice.value.items.push(createEditItem());
+    }
+
+    function removeEditItem(index) {
+      editInvoice.value.items.splice(index, 1);
+    }
+
+    function findProductById(productId) {
+      return productsCatalog.value.find((product) => Number(product.id) === Number(productId)) || null;
+    }
+
+    function findProductStock(productId) {
+      const product = findProductById(productId);
+      return product ? Number(product.stock) : null;
+    }
+
+    function findProductByLookup(keyword) {
+      const value = String(keyword || '').trim();
+      if (!value) return null;
+      return productsCatalog.value.find((product) => (
+        product.name === value || (product.barcode && product.barcode === value)
+      )) || null;
+    }
+
+    function syncEditItemProduct(item) {
+      const typedValue = String(item.product_name || '').trim();
+      const product = findProductByLookup(typedValue);
+
+      if (!product) {
+        if (typedValue !== String(item.linked_name || '').trim()) {
+          item.product_id = null;
+          item.barcode = '';
+        }
+        return;
+      }
+
+      item.product_id = Number(product.id);
+      item.product_name = product.name;
+      item.linked_name = product.name;
+      item.barcode = product.barcode || '';
+      if (!(Number(item.unit_price) > 0)) {
+        item.unit_price = Number(product.price) || 0;
+      }
+    }
+
+    function closeEditModal() {
+      showEdit.value = false;
+      editSaving.value = false;
+      editError.value = '';
+      reopenDetailAfterEdit.value = false;
+      editInvoice.value = createEditDraft();
+    }
+
+    async function openEditInvoice(id) {
+      await loadProductsCatalog();
+      const r = await fetch(`/api/invoices/${id}`);
+      const d = await r.json();
+      if (!d.success) {
+        showToast(d.message || 'تعذر تحميل بيانات الفاتورة', 'error');
+        return;
+      }
+
+      reopenDetailAfterEdit.value = showDetail.value && selectedInvoice.value?.id === d.data.id;
+      showDetail.value = false;
+      editError.value = '';
+      editInvoice.value = createEditDraft(d.data);
+      if (!editInvoice.value.items.length) addEditItem();
+      showEdit.value = true;
+    }
+
+    async function saveInvoiceEdit() {
+      const preparedItems = editInvoice.value.items
+        .map((item) => {
+          const typedName = String(item.product_name || '').trim();
+          const matchedProduct = findProductByLookup(typedName);
+          const keepLinkedProduct = item.product_id && typedName === String(item.linked_name || '').trim();
+
+          return {
+            product_id: matchedProduct
+              ? Number(matchedProduct.id)
+              : keepLinkedProduct
+                ? Number(item.product_id)
+                : null,
+            product_name: matchedProduct ? matchedProduct.name : typedName,
+            barcode: matchedProduct
+              ? (matchedProduct.barcode || null)
+              : (String(item.barcode || '').trim() || null),
+            quantity: Number(item.quantity),
+            unit_price: Number(item.unit_price)
+          };
+        })
+        .filter((item) => item.product_name || item.quantity || item.unit_price);
+
+      if (!preparedItems.length) {
+        editError.value = 'أضف صنفًا واحدًا على الأقل';
+        return;
+      }
+
+      const invalidItem = preparedItems.find((item) => (
+        !item.product_name ||
+        !Number.isFinite(item.quantity) ||
+        item.quantity <= 0 ||
+        !Number.isFinite(item.unit_price) ||
+        item.unit_price < 0
+      ));
+
+      if (invalidItem) {
+        editError.value = 'راجع اسم الصنف والكمية والسعر قبل الحفظ';
+        return;
+      }
+
+      editSaving.value = true;
+      editError.value = '';
+
+      const finalPaidAmount = Math.max(
+        editInvoiceNetTotal.value,
+        Number(editInvoice.value.paid_amount) || 0
+      );
+      editInvoice.value.paid_amount = finalPaidAmount;
+
+      const r = await fetch(`/api/invoices/${editInvoice.value.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          payment_method: editInvoice.value.payment_method,
+          discount: Math.max(0, Number(editInvoice.value.discount) || 0),
+          paid_amount: finalPaidAmount,
+          notes: String(editInvoice.value.notes || '').trim(),
+          items: preparedItems
+        })
+      });
+      const d = await r.json();
+      editSaving.value = false;
+
+      if (!d.success) {
+        editError.value = d.message || 'تعذر حفظ التعديل';
+        return;
+      }
+
+      showToast(d.message || 'تم تحديث الفاتورة', 'success');
+      showEdit.value = false;
+      await loadTodayStats();
+      await loadInvoices(currentPage.value);
+
+      if (reopenDetailAfterEdit.value) {
+        await viewInvoice(editInvoice.value.id);
+      }
+
+      reopenDetailAfterEdit.value = false;
+      editInvoice.value = createEditDraft();
+    }
+
+    async function deleteInvoice(invoice) {
+      if (!invoice?.id || deletingInvoiceId.value) return;
+
+      const invoiceNumber = invoice.invoice_number || '';
+      if (!confirm(`حذف الفاتورة ${invoiceNumber}؟ سيتم عكس حركة المخزون المرتبطة بها.`)) {
+        return;
+      }
+
+      deletingInvoiceId.value = invoice.id;
+
+      try {
+        const r = await fetch(`/api/invoices/${invoice.id}`, { method: 'DELETE' });
+        const d = await r.json();
+
+        if (!d.success) {
+          showToast(d.message || 'تعذر حذف الفاتورة', 'error');
+          return;
+        }
+
+        showToast(d.message || 'تم حذف الفاتورة', 'success');
+        showDetail.value = false;
+        selectedInvoice.value = null;
+
+        if (showEdit.value && editInvoice.value.id === invoice.id) {
+          closeEditModal();
+        }
+
+        await loadTodayStats();
+
+        const nextPage = invoices.value.length === 1 && currentPage.value > 1
+          ? currentPage.value - 1
+          : currentPage.value;
+        await loadInvoices(nextPage);
+      } catch (error) {
+        showToast('خطأ في الاتصال بالخادم', 'error');
+      } finally {
+        deletingInvoiceId.value = null;
+      }
+    }
+
+    function printInvoice() { window.print(); }
+    function doLogout() { if (confirm('تسجيل الخروج؟')) logout(); }
+
+    onMounted(async () => {
+      currentUser.value = await getCurrentUser();
+      const r = await fetch('/api/settings');
+      const d = await r.json();
+      if (d.success) {
+        currency.value = d.data.currency || 'ج.م';
+        curPos.value = d.data.currency_position || 'after';
+        shopName.value = d.data.shop_name || '';
+        receiptFooter.value = d.data.receipt_footer || 'شكراً لزيارتكم';
+      }
+      await loadTodayStats();
+      await loadInvoices(1);
+    });
+
+    return {
+      currentUser, invoices, loading, total, currentPage, limit, searchQuery, fromDate, toDate,
+      todayStats, shopName, receiptFooter, showDetail, selectedInvoice,
+      showEdit, editSaving, deletingInvoiceId, editError, editInvoice, productsCatalog,
+      activeQuickFilter, isCashier, barcodeProducts, visibleNetTotal, visiblePaidTotal, visibleChangeTotal, quickFilterTitle,
+      editInvoiceTotal, editInvoiceNetTotal, editInvoiceChange, editInvoiceRemaining,
+      formatMoney, formatDate, paymentMethodLabel, editLineSubtotal,
+      loadInvoices, resetFilters, applyTodayInvoicesFilter, applyTodaySalesFilter, showAllInvoices,
+      viewInvoice, openEditInvoice, closeEditModal,
+      addEditItem, removeEditItem, syncEditItemProduct, findProductStock,
+      saveInvoiceEdit, deleteInvoice, printInvoice, doLogout,
+    };
+  }
+}).mount('#app');
+</script>
+</body>
+</html>
