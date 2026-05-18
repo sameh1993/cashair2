@@ -4,10 +4,12 @@ const session = require('express-session');
 const bodyParser = require('body-parser');
 const path = require('path');
 const { ensureSchema } = require('./config/schema');
+const MySqlSessionStore = require('./config/sessionStore');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const DB_NAME = process.env.DB_NAME || 'cashier_db';
+const DB_HOST = process.env.DB_HOST || 'localhost';
 let schemaReady;
 
 function ensureSchemaOnce() {
@@ -21,16 +23,21 @@ function ensureSchemaOnce() {
 }
 
 // ==================== Middleware ====================
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(session({
+  store: new MySqlSessionStore(),
   secret: process.env.SESSION_SECRET || 'cashier_secret_2024',
   resave: false,
   saveUninitialized: false,
   cookie: {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    sameSite: 'lax',
     maxAge: 8 * 60 * 60 * 1000   // 8 ساعات
   }
 }));
@@ -80,7 +87,8 @@ async function startServer() {
 
   app.listen(PORT, () => {
     console.log(`\n🚀 Cashier POS running on http://localhost:${PORT}
-                      database: ${DB_NAME}`);
+                      database: ${DB_NAME} 
+                      host name: ${DB_HOST}`);
     console.log(`   المستخدم الافتراضي: admin / 1234\n`);
   });
 }

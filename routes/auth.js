@@ -3,6 +3,14 @@ const bcrypt  = require('bcryptjs');
 const db      = require('../config/db');
 const router  = express.Router();
 
+function normalizePasswordHash(hash) {
+  return String(hash || '').trim();
+}
+
+function isBcryptHash(hash) {
+  return /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(hash);
+}
+
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
   const { username, password } = req.body;
@@ -15,7 +23,16 @@ router.post('/login', async (req, res) => {
       return res.json({ success: false, message: 'اسم المستخدم أو كلمة المرور غير صحيحة' });
 
     const user = rows[0];
-    const valid = await bcrypt.compare(password, user.password);
+    const passwordHash = normalizePasswordHash(user.password);
+    if (!isBcryptHash(passwordHash)) {
+      console.error(`Invalid password hash for user: ${username}`);
+      return res.status(500).json({
+        success: false,
+        message: 'كلمة مرور هذا المستخدم غير مهيأة بشكل صحيح. أعد ضبط كلمة المرور من قاعدة البيانات.'
+      });
+    }
+
+    const valid = await bcrypt.compare(password, passwordHash);
     if (!valid)
       return res.json({ success: false, message: 'اسم المستخدم أو كلمة المرور غير صحيحة' });
 
@@ -50,7 +67,15 @@ router.post('/change-password', async (req, res) => {
 
   try {
     const [rows] = await db.query('SELECT * FROM users WHERE id = ?', [req.session.user.id]);
-    const valid = await bcrypt.compare(old_password, rows[0].password);
+    const passwordHash = normalizePasswordHash(rows[0]?.password);
+    if (!isBcryptHash(passwordHash)) {
+      return res.status(500).json({
+        success: false,
+        message: 'كلمة مرور هذا المستخدم غير مهيأة بشكل صحيح. أعد ضبط كلمة المرور من قاعدة البيانات.'
+      });
+    }
+
+    const valid = await bcrypt.compare(old_password, passwordHash);
     if (!valid) return res.json({ success: false, message: 'كلمة المرور الحالية غير صحيحة' });
 
     const hash = await bcrypt.hash(new_password, 10);
