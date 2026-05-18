@@ -1,5 +1,7 @@
 const db = require('./db');
 
+const DEFAULT_ADMIN_HASH = '$2a$10$exigmF2pcJrdn53f7R.DG.m5p9DZjT8b87cBWcnSFnNqwTsNlRFP2';
+
 async function ensureProductsSchema() {
   const [categoryColumn] = await db.query(`
     SELECT COLUMN_NAME
@@ -50,6 +52,22 @@ async function ensureProductStockPrecision() {
 
     console.log('ℹ️ تم تحديث عمود stock ليقبل الكسور العشرية');
   }
+}
+
+async function ensureDefaultAdminUser() {
+  const [[adminUser]] = await db.query(
+    "SELECT id FROM users WHERE username = 'admin' LIMIT 1"
+  );
+
+  if (adminUser) return;
+
+  await db.query(
+    `INSERT INTO users (username, password, full_name, role)
+     VALUES ('admin', ?, 'المدير', 'admin')`,
+    [DEFAULT_ADMIN_HASH]
+  );
+
+  console.log('ℹ️ تم إنشاء المستخدم الافتراضي admin / 1234');
 }
 
 async function ensureWarehouseSchema() {
@@ -305,6 +323,7 @@ async function syncProductsStockFromWarehouses() {
 async function ensureSchema() {
   await ensureProductsSchema();
   await ensureProductStockPrecision();
+  await ensureDefaultAdminUser();
   await ensureWarehouseSchema();
   await ensureDefaultWarehouse();
   await ensureSalesWarehouseSetting();

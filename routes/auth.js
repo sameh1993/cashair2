@@ -11,6 +11,15 @@ function isBcryptHash(hash) {
   return /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(hash);
 }
 
+function saveSession(req) {
+  return new Promise((resolve, reject) => {
+    req.session.save((error) => {
+      if (error) reject(error);
+      else resolve();
+    });
+  });
+}
+
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
   const { username, password } = req.body;
@@ -37,6 +46,7 @@ router.post('/login', async (req, res) => {
       return res.json({ success: false, message: 'اسم المستخدم أو كلمة المرور غير صحيحة' });
 
     req.session.user = { id: user.id, username: user.username, full_name: user.full_name, role: user.role };
+    await saveSession(req);
     res.json({ success: true, user: req.session.user });
   } catch (e) {
     console.error(e);
