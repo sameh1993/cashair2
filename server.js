@@ -7,7 +7,18 @@ const { ensureSchema } = require('./config/schema');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DB_NAME = process.env.DB_NAME || 3000;
+const DB_NAME = process.env.DB_NAME || 'cashier_db';
+let schemaReady;
+
+function ensureSchemaOnce() {
+  if (!schemaReady) {
+    schemaReady = ensureSchema().catch((error) => {
+      console.error('⚠️ تعذر تنفيذ ترقية قاعدة البيانات تلقائيًا:', error.message);
+    });
+  }
+
+  return schemaReady;
+}
 
 // ==================== Middleware ====================
 app.use(bodyParser.json());
@@ -18,12 +29,19 @@ app.use(session({
   saveUninitialized: false,
   cookie: {
     httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     maxAge: 8 * 60 * 60 * 1000   // 8 ساعات
   }
 }));
 
 // Static files
 app.use(express.static(path.join(__dirname, 'public')));
+
+app.use(async (req, res, next) => {
+  await ensureSchemaOnce();
+  next();
+});
 
 // ==================== Routes ====================
 app.use('/api/auth', require('./routes/auth'));
@@ -58,11 +76,7 @@ app.use((req, res) => res.status(404).send('الصفحة غير موجودة'));
 
 // ==================== Start ====================
 async function startServer() {
-  try {
-    await ensureSchema();
-  } catch (error) {
-    console.error('⚠️ تعذر تنفيذ ترقية قاعدة البيانات تلقائيًا:', error.message);
-  }
+  await ensureSchemaOnce();
 
   app.listen(PORT, () => {
     console.log(`\n🚀 Cashier POS running on http://localhost:${PORT}
@@ -71,4 +85,8 @@ async function startServer() {
   });
 }
 
-startServer();
+if (require.main === module) {
+  startServer();
+}
+
+module.exports = app;
