@@ -98,8 +98,8 @@ router.post('/change-password', async (req, res) => {
 
 router.get('/resolve', async (req, res) => {
 
-  bcrypt.hash("1234", 10, async function (err, hash) {
-    console.log(hash)
+  bcrypt.hash("333", 10, async function (err, hash) {
+    // console.log(hash)
     const user = await db.query(`INSERT IGNORE INTO users (username, password, full_name, role)
                 VALUES ('admin', ${hash}, 'المدير', 'admin')`)
 
