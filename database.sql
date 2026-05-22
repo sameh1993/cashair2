@@ -4,7 +4,7 @@
 
 -- CREATE DATABASE IF NOT EXISTS cashier_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 -- USE cashier_db;
-CREATE DATABASE IF NOT EXISTS cashier_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+-- CREATE DATABASE IF NOT EXISTS cashier_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 -- USE cashier_db;
 
 -- جدول المستخدمين
@@ -187,8 +187,8 @@ CREATE TABLE IF NOT EXISTS stock_count_items (
 -- =====================
 
 -- مستخدم افتراضي: admin / 1234
-INSERT IGNORE INTO users (username, password, full_name, role)
-VALUES ('admin', '$2a$10$exigmF2pcJrdn53f7R.DG.m5p9DZjT8b87cBWcnSFnNqwTsNlRFP2', 'المدير', 'admin');
+-- INSERT IGNORE INTO users (username, password, full_name, role)
+-- VALUES ('admin', '$2a$10$exigmF2pcJrdn53f7R.DG.m5p9DZjT8b87cBWcnSFnNqwTsNlRFP2', 'المدير', 'admin');
 -- الباسورد: 1234
 
 -- إعدادات افتراضية

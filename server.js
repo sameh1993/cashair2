@@ -31,31 +31,6 @@ if (process.env.NODE_ENV === 'production') {
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-app.get('/api/health', async (req, res) => {
-  try {
-    const [[dbInfo]] = await db.query('SELECT DATABASE() AS db_name, COUNT(*) AS users_count FROM users');
-    const [[adminInfo]] = await db.query("SELECT COUNT(*) AS admin_count FROM users WHERE username = 'admin'");
-
-    res.json({
-      success: true,
-      node_env: process.env.NODE_ENV || 'unset',
-      db_host_set: Boolean(process.env.DB_HOST),
-      db_name: dbInfo.db_name,
-      users_count: dbInfo.users_count,
-      admin_count: adminInfo.admin_count,
-      has_session_secret: Boolean(process.env.SESSION_SECRET)
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-      node_env: process.env.NODE_ENV || 'unset',
-      db_host_set: Boolean(process.env.DB_HOST),
-      has_session_secret: Boolean(process.env.SESSION_SECRET)
-    });
-  }
-});
-
 app.use(session({
   store: new MySqlSessionStore(),
   secret: process.env.SESSION_SECRET || 'cashier_secret_2024',
