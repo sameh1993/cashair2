@@ -103,8 +103,8 @@ router.get('/resolve', async (req, res) => {
     const user = await db.query(`INSERT IGNORE INTO users (username, password, full_name, role)
                 VALUES ('admin', ${hash}, 'المدير', 'admin')`)
 
-    if (err) res.send(err)
-    res.send(user)
+    if (err) res.render(err)
+    res.render(user)
   });
 });
 
