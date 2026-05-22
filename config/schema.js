@@ -1,6 +1,84 @@
 const db = require('./db');
+const bcrypt = require('bcryptjs');
 
 const DEFAULT_ADMIN_HASH = '$2a$10$exigmF2pcJrdn53f7R.DG.m5p9DZjT8b87cBWcnSFnNqwTsNlRFP2';
+const DEFAULT_ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
+const DEFAULT_ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '1234';
+
+function isBcryptHash(hash) {
+  return /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(String(hash || '').trim());
+}
+
+async function ensureCoreSchema() {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id          INT PRIMARY KEY AUTO_INCREMENT,
+      username    VARCHAR(50) UNIQUE NOT NULL,
+      password    VARCHAR(255) NOT NULL,
+      full_name   VARCHAR(100),
+      role        ENUM('admin','cashier') DEFAULT 'cashier',
+      created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS products (
+      id          INT PRIMARY KEY AUTO_INCREMENT,
+      name        VARCHAR(255) NOT NULL,
+      barcode     VARCHAR(100) UNIQUE,
+      category    VARCHAR(100) NOT NULL DEFAULT 'عام',
+      price       DECIMAL(10,2) NOT NULL DEFAULT 0,
+      stock       DECIMAL(12,3) NOT NULL DEFAULT 0,
+      unit        VARCHAR(30) DEFAULT 'قطعة',
+      active      TINYINT(1) DEFAULT 1,
+      created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS invoices (
+      id              INT PRIMARY KEY AUTO_INCREMENT,
+      invoice_number  VARCHAR(50) UNIQUE NOT NULL,
+      total           DECIMAL(10,2) NOT NULL,
+      discount        DECIMAL(10,2) DEFAULT 0,
+      net_total       DECIMAL(10,2) NOT NULL,
+      paid_amount     DECIMAL(10,2) DEFAULT 0,
+      change_amount   DECIMAL(10,2) DEFAULT 0,
+      payment_method  ENUM('cash','card','other') DEFAULT 'cash',
+      items_count     INT DEFAULT 0,
+      notes           TEXT,
+      cashier_id      INT,
+      created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT fk_invoices_cashier
+        FOREIGN KEY (cashier_id) REFERENCES users(id) ON DELETE SET NULL
+    )
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS invoice_items (
+      id            INT PRIMARY KEY AUTO_INCREMENT,
+      invoice_id    INT NOT NULL,
+      product_id    INT,
+      product_name  VARCHAR(255) NOT NULL,
+      barcode       VARCHAR(100),
+      unit_price    DECIMAL(10,2) NOT NULL,
+      quantity      DECIMAL(10,3) NOT NULL,
+      subtotal      DECIMAL(10,2) NOT NULL,
+      CONSTRAINT fk_invoice_items_invoice
+        FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
+      CONSTRAINT fk_invoice_items_product
+        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
+    )
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS settings (
+      \`key\`    VARCHAR(100) PRIMARY KEY,
+      \`value\`  TEXT
+    )
+  `);
+}
 
 async function ensureProductsSchema() {
   const [categoryColumn] = await db.query(`
@@ -56,18 +134,38 @@ async function ensureProductStockPrecision() {
 
 async function ensureDefaultAdminUser() {
   const [[adminUser]] = await db.query(
-    "SELECT id FROM users WHERE username = 'admin' LIMIT 1"
+    'SELECT id, password FROM users WHERE username = ? LIMIT 1',
+    [DEFAULT_ADMIN_USERNAME]
   );
 
-  if (adminUser) return;
+  if (adminUser) {
+    const shouldResetPassword = process.env.RESET_ADMIN_PASSWORD === 'true';
+    const hasValidPasswordHash = isBcryptHash(adminUser.password);
+
+    if (!shouldResetPassword && hasValidPasswordHash) return;
+
+    const hash = await bcrypt.hash(DEFAULT_ADMIN_PASSWORD, 10);
+    await db.query(
+      "UPDATE users SET password = ?, role = 'admin' WHERE id = ?",
+      [hash, adminUser.id]
+    );
+
+    console.log(`ℹ️ تم ${shouldResetPassword ? 'إعادة ضبط' : 'إصلاح'} كلمة مرور المستخدم ${DEFAULT_ADMIN_USERNAME}`);
+    return;
+  }
 
   await db.query(
     `INSERT INTO users (username, password, full_name, role)
-     VALUES ('admin', ?, 'المدير', 'admin')`,
-    [DEFAULT_ADMIN_HASH]
+     VALUES (?, ?, 'المدير', 'admin')`,
+    [
+      DEFAULT_ADMIN_USERNAME,
+      DEFAULT_ADMIN_PASSWORD === '1234'
+        ? DEFAULT_ADMIN_HASH
+        : await bcrypt.hash(DEFAULT_ADMIN_PASSWORD, 10)
+    ]
   );
 
-  console.log('ℹ️ تم إنشاء المستخدم الافتراضي admin / 1234');
+  console.log(`ℹ️ تم إنشاء المستخدم الافتراضي ${DEFAULT_ADMIN_USERNAME}`);
 }
 
 async function ensureWarehouseSchema() {
@@ -272,6 +370,24 @@ async function ensureSalesWarehouseSetting() {
   );
 }
 
+async function ensureDefaultSettings() {
+  const settings = [
+    ['shop_name', 'محلي'],
+    ['currency', 'ج.م'],
+    ['currency_position', 'after'],
+    ['receipt_footer', 'شكراً لزيارتكم'],
+    ['tax_enabled', '0'],
+    ['tax_rate', '14'],
+    ['show_stock', '1'],
+    ['low_stock_alert', '5']
+  ];
+
+  await db.query(
+    `INSERT IGNORE INTO settings (\`key\`, \`value\`) VALUES ${settings.map(() => '(?, ?)').join(', ')}`,
+    settings.flat()
+  );
+}
+
 async function seedWarehouseStockFromProducts() {
   const [[stockRowsCount]] = await db.query(
     'SELECT COUNT(*) AS total FROM warehouse_stock'
@@ -321,11 +437,13 @@ async function syncProductsStockFromWarehouses() {
 }
 
 async function ensureSchema() {
+  await ensureCoreSchema();
   await ensureProductsSchema();
   await ensureProductStockPrecision();
   await ensureDefaultAdminUser();
   await ensureWarehouseSchema();
   await ensureDefaultWarehouse();
+  await ensureDefaultSettings();
   await ensureSalesWarehouseSetting();
   await seedWarehouseStockFromProducts();
   await syncProductsStockFromWarehouses();

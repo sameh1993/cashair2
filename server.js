@@ -28,6 +28,8 @@ if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1);
 }
 
+
+
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
@@ -67,6 +69,8 @@ function requireSession(req, res, next) {
   if (req.session && req.session.user) return next();
   res.redirect('/');
 }
+
+
 
 app.get('/', (req, res) => {
   if (req.session?.user) return res.redirect('/pos');

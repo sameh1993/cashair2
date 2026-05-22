@@ -96,12 +96,20 @@ router.post('/change-password', async (req, res) => {
   }
 });
 
-const { resetAdminPassword } = require("../scripts/reset-admin-password")
-
 router.get('/resolve', async (req, res) => {
   try {
-    const [[dbInfo]] = await db.query('SELECT DATABASE() AS db_name, COUNT(*) AS users_count FROM users');
-    const [[adminInfo]] = await db.query("SELECT COUNT(*) AS admin_count FROM users WHERE username = 'admin'");
+    const adminUsername = process.env.ADMIN_USERNAME || 'admin';
+    const [[dbInfo]] = await db.query(`
+      SELECT DATABASE() AS db_name,
+             (SELECT COUNT(*) FROM users) AS users_count
+    `);
+    const [[adminInfo]] = await db.query(
+      `SELECT COUNT(*) AS admin_count,
+              MAX(CASE WHEN password REGEXP '^\\\\$2[aby]\\\\$[0-9]{2}\\\\$[./A-Za-z0-9]{53}$' THEN 1 ELSE 0 END) AS admin_password_ready
+       FROM users
+       WHERE username = ?`,
+      [adminUsername]
+    );
 
     res.json({
       success: true,
@@ -109,7 +117,10 @@ router.get('/resolve', async (req, res) => {
       db_host_set: Boolean(process.env.DB_HOST),
       db_name: dbInfo.db_name,
       users_count: dbInfo.users_count,
+      admin_username: adminUsername,
       admin_count: adminInfo.admin_count,
+      admin_password_ready: Boolean(adminInfo.admin_password_ready),
+      reset_admin_password: process.env.RESET_ADMIN_PASSWORD === 'true',
       has_session_secret: Boolean(process.env.SESSION_SECRET)
     });
   } catch (error) {
