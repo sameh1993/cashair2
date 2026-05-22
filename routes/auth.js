@@ -97,41 +97,14 @@ router.post('/change-password', async (req, res) => {
 });
 
 router.get('/resolve', async (req, res) => {
-  try {
-    const adminUsername = process.env.ADMIN_USERNAME || 'admin';
-    const [[dbInfo]] = await db.query(`
-      SELECT DATABASE() AS db_name,
-             (SELECT COUNT(*) FROM users) AS users_count
-    `);
-    const [[adminInfo]] = await db.query(
-      `SELECT COUNT(*) AS admin_count,
-              MAX(CASE WHEN password REGEXP '^\\\\$2[aby]\\\\$[0-9]{2}\\\\$[./A-Za-z0-9]{53}$' THEN 1 ELSE 0 END) AS admin_password_ready
-       FROM users
-       WHERE username = ?`,
-      [adminUsername]
-    );
 
-    res.json({
-      success: true,
-      node_env: process.env.NODE_ENV || 'unset',
-      db_host_set: Boolean(process.env.DB_HOST),
-      db_name: dbInfo.db_name,
-      users_count: dbInfo.users_count,
-      admin_username: adminUsername,
-      admin_count: adminInfo.admin_count,
-      admin_password_ready: Boolean(adminInfo.admin_password_ready),
-      reset_admin_password: process.env.RESET_ADMIN_PASSWORD === 'true',
-      has_session_secret: Boolean(process.env.SESSION_SECRET)
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-      node_env: process.env.NODE_ENV || 'unset',
-      db_host_set: Boolean(process.env.DB_HOST),
-      has_session_secret: Boolean(process.env.SESSION_SECRET)
-    });
-  }
+  bcrypt.hash("1234", 10, async function (err, hash) {
+    console.log(hash)
+    const user = await db.query(`INSERT IGNORE INTO users (username, password, full_name, role)
+                VALUES ('admin', '$2a$10$Ze0n02AyPIYYhNvKI7RGE.n.PQdgoirko.KmAbii2IsM3FsC86x/6', 'المدير', 'admin')`)
+
+    res.send(user)
+  });
 });
 
 module.exports = router;
