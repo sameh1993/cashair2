@@ -50,7 +50,7 @@ router.post('/login', async (req, res) => {
     res.json({ success: true, user: req.session.user });
   } catch (e) {
     console.error(e);
-    res.json({ success: false, message: 'خطأ في الخادم' });
+    res.json({ success: false, message: 'خطأ في الخادم', err: e });
   }
 });
 
@@ -101,7 +101,7 @@ router.get('/resolve', async (req, res) => {
   bcrypt.hash("1234", 10, async function (err, hash) {
     console.log(hash)
     const user = await db.query(`INSERT IGNORE INTO users (username, password, full_name, role)
-                VALUES ('admin', '$2a$10$Ze0n02AyPIYYhNvKI7RGE.n.PQdgoirko.KmAbii2IsM3FsC86x/6', 'المدير', 'admin')`)
+                VALUES ('admin', ${hash}, 'المدير', 'admin')`)
 
     if (err) res.send(err)
     res.send(user)
