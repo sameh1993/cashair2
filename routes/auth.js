@@ -20,6 +20,32 @@ function saveSession(req) {
   });
 }
 
+function getServerErrorMessage(error) {
+  const code = error?.code;
+
+  if (['ENOTFOUND', 'ECONNREFUSED', 'ETIMEDOUT', 'PROTOCOL_CONNECTION_LOST'].includes(code)) {
+    return 'تعذر الاتصال بقاعدة البيانات. تأكد من إعدادات DB_HOST و DB_PORT على Vercel.';
+  }
+
+  if (code === 'ER_ACCESS_DENIED_ERROR') {
+    return 'بيانات مستخدم قاعدة البيانات غير صحيحة على Vercel.';
+  }
+
+  if (code === 'ER_BAD_DB_ERROR') {
+    return 'اسم قاعدة البيانات غير صحيح أو غير موجود على Vercel.';
+  }
+
+  if (code === 'ER_NO_SUCH_TABLE') {
+    return 'جداول قاعدة البيانات غير موجودة. استورد ملف قاعدة البيانات أو اسمح للتطبيق بإنشائها.';
+  }
+
+  if (['ER_TABLEACCESS_DENIED_ERROR', 'ER_DBACCESS_DENIED_ERROR'].includes(code)) {
+    return 'مستخدم قاعدة البيانات لا يملك صلاحيات كافية للقراءة أو كتابة الجلسات.';
+  }
+
+  return 'خطأ في الخادم';
+}
+
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
   const { username, password } = req.body;
@@ -49,8 +75,13 @@ router.post('/login', async (req, res) => {
     await saveSession(req);
     res.json({ success: true, user: req.session.user });
   } catch (e) {
-    console.error(e);
-    res.json({ success: false, message: 'خطأ في الخادم', err: e });
+    console.error('Login error:', {
+      code: e?.code,
+      errno: e?.errno,
+      sqlState: e?.sqlState,
+      message: e?.message
+    });
+    res.status(500).json({ success: false, message: getServerErrorMessage(e) });
   }
 });
 
@@ -92,20 +123,14 @@ router.post('/change-password', async (req, res) => {
     await db.query('UPDATE users SET password = ? WHERE id = ?', [hash, req.session.user.id]);
     res.json({ success: true, message: 'تم تغيير كلمة المرور بنجاح' });
   } catch (e) {
-    res.json({ success: false, message: 'خطأ في الخادم' });
+    console.error('Change password error:', {
+      code: e?.code,
+      errno: e?.errno,
+      sqlState: e?.sqlState,
+      message: e?.message
+    });
+    res.status(500).json({ success: false, message: getServerErrorMessage(e) });
   }
-});
-
-router.get('/resolve', async (req, res) => {
-
-  bcrypt.hash("333", 10, async function (err, hash) {
-    // console.log(hash)
-    const user = await db.query(`INSERT IGNORE INTO users (username, password, full_name, role)
-                VALUES ('admin', ${hash}, 'المدير', 'admin')`)
-
-    if (err) res.render(err)
-    res.render(user)
-  });
 });
 
 module.exports = router;

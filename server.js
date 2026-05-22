@@ -70,8 +70,6 @@ function requireSession(req, res, next) {
   res.redirect('/');
 }
 
-
-
 app.get('/', (req, res) => {
   if (req.session?.user) return res.redirect('/pos');
   res.sendFile(path.join(__dirname, 'public', 'login.html'));

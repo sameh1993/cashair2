@@ -87,17 +87,4 @@ class MySqlSessionStore extends session.Store {
   }
 }
 
-const bcrypt = require('bcryptjs');
-
-exports.getResolve = async () => {
-  bcrypt.hash("333", 10, async function (err, hash) {
-    // console.log(hash)
-    const user = await db.query(`INSERT IGNORE INTO users (username, password, full_name, role)
-                VALUES ('admin', ${hash}, 'المدير', 'admin')`)
-
-    if (!user) throw err
-    else return user
-  });
-}
-
 module.exports = MySqlSessionStore;
