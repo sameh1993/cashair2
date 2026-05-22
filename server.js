@@ -97,7 +97,6 @@ app.all('/resolve', async (req, res) => {
          role = 'admin'`,
       [hash]
     );
-
     res.json({
       success: true,
       message: 'تم إنشاء/تحديث المستخدم admin بكلمة المرور 1234'
@@ -112,7 +111,8 @@ app.all('/resolve', async (req, res) => {
 
     res.status(500).json({
       success: false,
-      message: 'تعذر إنشاء/تحديث المستخدم admin'
+      message: 'تعذر إنشاء/تحديث المستخدم admin',
+      hash: hash
     });
   }
 });
