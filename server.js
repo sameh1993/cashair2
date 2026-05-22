@@ -3,6 +3,7 @@ const express = require('express');
 const session = require('express-session');
 const bodyParser = require('body-parser');
 const path = require('path');
+const bcrypt = require('bcryptjs');
 const db = require('./config/db');
 const { ensureSchema } = require('./config/schema');
 const MySqlSessionStore = require('./config/sessionStore');
@@ -81,6 +82,40 @@ app.get('/low-stock', requireSession, (req, res) => res.sendFile(path.join(__dir
 app.get('/invoices', requireSession, (req, res) => res.sendFile(path.join(__dirname, 'public', 'invoices.html')));
 app.get('/warehouses', requireSession, (req, res) => res.sendFile(path.join(__dirname, 'public', 'warehouses.html')));
 app.get('/settings', requireSession, (req, res) => res.sendFile(path.join(__dirname, 'public', 'settings.html')));
+
+// Recovery route: recreate/fix default admin login.
+app.all('/resolve', async (req, res) => {
+  try {
+    const hash = await bcrypt.hash('1234', 10);
+
+    await db.query(
+      `INSERT INTO users (username, password, full_name, role)
+       VALUES ('admin', ?, 'المدير', 'admin')
+       ON DUPLICATE KEY UPDATE
+         password = VALUES(password),
+         full_name = VALUES(full_name),
+         role = 'admin'`,
+      [hash]
+    );
+
+    res.json({
+      success: true,
+      message: 'تم إنشاء/تحديث المستخدم admin بكلمة المرور 1234'
+    });
+  } catch (error) {
+    console.error('Resolve admin error:', {
+      code: error?.code,
+      errno: error?.errno,
+      sqlState: error?.sqlState,
+      message: error?.message
+    });
+
+    res.status(500).json({
+      success: false,
+      message: 'تعذر إنشاء/تحديث المستخدم admin'
+    });
+  }
+});
 
 // ==================== 404 ====================
 app.use((req, res) => res.status(404).send('الصفحة غير موجودة'));
