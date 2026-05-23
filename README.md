@@ -52,7 +52,7 @@ source cashier_db.sql
 لا ترفع ملف `.env` لأنه يحتوي بيانات حساسة. الملف `.gitignore` مضاف لهذا السبب.
 
 ### 3. اربط المشروع في Vercel
-من Vercel اختر المشروع من GitHub، واترك الإعدادات كما هي. ملف `vercel.json` يوجه كل الطلبات إلى `server.js`.
+من Vercel اختر المشروع من GitHub، واترك الإعدادات كما هي. Vercel يتعرف على `server.js` كتطبيق Express تلقائيًا.
 
 ### 4. أضف Environment Variables في Vercel
 من Project Settings > Environment Variables أضف:
