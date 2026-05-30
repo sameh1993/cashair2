@@ -1,111 +1,8 @@
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>الكاشير | نظام البيع</title>
-  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css">
-  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-  <style>
-    body { overflow: hidden; }
-    .pos-topbar {
-      height: 50px; background: #1e293b;
-      display: flex; align-items: center;
-      padding: 0 14px; gap: 10px; flex-shrink: 0;
-    }
-    .pos-topbar .shop-name { color: #fff; font-weight: 700; font-size: 15px; flex: 1; }
-    .pos-topbar a {
-      color: #94a3b8; text-decoration: none;
-      padding: 6px 12px; border-radius: 8px;
-      font-size: 12.5px; font-weight: 600;
-      transition: all .2s;
-    }
-    .pos-topbar a:hover { background: rgba(255,255,255,.1); color: #fff; }
-    .pos-topbar .logout-btn {
-      color: #f87171; cursor: pointer;
-      padding: 6px 12px; border-radius: 8px;
-      font-size: 12.5px; font-weight: 600;
-      transition: all .2s; background: none; border: none;
-      font-family: 'Cairo', sans-serif;
-    }
-    .pos-topbar .logout-btn:hover { background: rgba(248,113,113,.15); }
-
-    .pos-wrapper { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-
-    /* Receipt hidden element for printing */
-    #receipt {
-      position: fixed;
-      top: 0;
-      left: -99999px;
-      width: 72mm;
-      background: #fff;
-      color: #111827;
-      padding: 0;
-      z-index: -1;
-    }
-
-    /* Payment modal big number */
-    .big-total {
-      font-size: 40px; font-weight: 800;
-      text-align: center; color: var(--primary);
-      padding: 10px 0; direction: ltr;
-    }
-    .numpad {
-      display: grid; grid-template-columns: repeat(3, 1fr);
-      gap: 8px; margin-top: 10px;
-    }
-    .num-btn {
-      padding: 14px; border-radius: 10px;
-      border: 1.5px solid #e2e8f0; background: #f8fafc;
-      font-size: 18px; font-weight: 700;
-      cursor: pointer; transition: all .15s;
-      font-family: 'Cairo', sans-serif;
-    }
-    .num-btn:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
-    .num-btn.del-btn { background: #fee2e2; color: var(--danger); border-color: #fecaca; }
-    .num-btn.clear-btn { background: #fef3c7; color: var(--warning); border-color: #fde68a; }
-
-    .change-display {
-      background: #f0fdf4; border: 2px solid #86efac;
-      border-radius: 10px; padding: 10px 14px;
-      display: flex; justify-content: space-between;
-      align-items: center; margin-top: 10px;
-    }
-    .change-display .change-label { font-weight: 600; color: #15803d; }
-    .change-display .change-val { font-size: 22px; font-weight: 800; color: #15803d; direction: ltr; }
-
-    .payment-shortcuts {
-      display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px;
-    }
-    .shortcut-btn {
-      flex: 1; min-width: 80px;
-      padding: 8px; border-radius: 8px;
-      border: 1.5px solid #e2e8f0; background: #f8fafc;
-      font-family: 'Cairo', sans-serif; font-size: 13px; font-weight: 700;
-      cursor: pointer; text-align: center; transition: all .15s;
-    }
-    .shortcut-btn:hover { border-color: var(--primary); color: var(--primary); background: #eff6ff; }
-
-    .discount-row {
-      display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
-    }
-  </style>
-</head>
+<%- include('partials/head', { title: "الكاشير | نظام البيع", useVue: true, extraHead: "<style>\n    body { overflow: hidden; }\n    .pos-topbar {\n      height: 50px; background: #1e293b;\n      display: flex; align-items: center;\n      padding: 0 14px; gap: 10px; flex-shrink: 0;\n    }\n    .pos-topbar .shop-name { color: #fff; font-weight: 700; font-size: 15px; flex: 1; }\n    .pos-topbar a {\n      color: #94a3b8; text-decoration: none;\n      padding: 6px 12px; border-radius: 8px;\n      font-size: 12.5px; font-weight: 600;\n      transition: all .2s;\n    }\n    .pos-topbar a:hover { background: rgba(255,255,255,.1); color: #fff; }\n    .pos-topbar .logout-btn {\n      color: #f87171; cursor: pointer;\n      padding: 6px 12px; border-radius: 8px;\n      font-size: 12.5px; font-weight: 600;\n      transition: all .2s; background: none; border: none;\n      font-family: 'Cairo', sans-serif;\n    }\n    .pos-topbar .logout-btn:hover { background: rgba(248,113,113,.15); }\n\n    .pos-wrapper { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }\n\n    /* Receipt hidden element for printing */\n    #receipt {\n      position: fixed;\n      top: 0;\n      left: -99999px;\n      width: 72mm;\n      background: #fff;\n      color: #111827;\n      padding: 0;\n      z-index: -1;\n    }\n\n    /* Payment modal big number */\n    .big-total {\n      font-size: 40px; font-weight: 800;\n      text-align: center; color: var(--primary);\n      padding: 10px 0; direction: ltr;\n    }\n    .numpad {\n      display: grid; grid-template-columns: repeat(3, 1fr);\n      gap: 8px; margin-top: 10px;\n    }\n    .num-btn {\n      padding: 14px; border-radius: 10px;\n      border: 1.5px solid #e2e8f0; background: #f8fafc;\n      font-size: 18px; font-weight: 700;\n      cursor: pointer; transition: all .15s;\n      font-family: 'Cairo', sans-serif;\n    }\n    .num-btn:hover { background: var(--primary); color: #fff; border-color: var(--primary); }\n    .num-btn.del-btn { background: #fee2e2; color: var(--danger); border-color: #fecaca; }\n    .num-btn.clear-btn { background: #fef3c7; color: var(--warning); border-color: #fde68a; }\n\n    .change-display {\n      background: #f0fdf4; border: 2px solid #86efac;\n      border-radius: 10px; padding: 10px 14px;\n      display: flex; justify-content: space-between;\n      align-items: center; margin-top: 10px;\n    }\n    .change-display .change-label { font-weight: 600; color: #15803d; }\n    .change-display .change-val { font-size: 22px; font-weight: 800; color: #15803d; direction: ltr; }\n\n    .payment-shortcuts {\n      display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px;\n    }\n    .shortcut-btn {\n      flex: 1; min-width: 80px;\n      padding: 8px; border-radius: 8px;\n      border: 1.5px solid #e2e8f0; background: #f8fafc;\n      font-family: 'Cairo', sans-serif; font-size: 13px; font-weight: 700;\n      cursor: pointer; text-align: center; transition: all .15s;\n    }\n    .shortcut-btn:hover { border-color: var(--primary); color: var(--primary); background: #eff6ff; }\n\n    .discount-row {\n      display: flex; align-items: center; gap: 8px; margin-bottom: 8px;\n    }\n\n    .scanner-modal { max-width: 520px; }\n    .scanner-view {\n      position: relative;\n      overflow: hidden;\n      border-radius: 12px;\n      background: #0f172a;\n      aspect-ratio: 4 / 3;\n      border: 2px solid #e2e8f0;\n    }\n    .scanner-view video {\n      width: 100%;\n      height: 100%;\n      object-fit: cover;\n      display: block;\n    }\n    .scanner-frame {\n      position: absolute;\n      inset: 18%;\n      border: 3px solid #22c55e;\n      border-radius: 12px;\n      box-shadow: 0 0 0 999px rgba(15, 23, 42, .38);\n      pointer-events: none;\n    }\n    .scanner-status {\n      margin-top: 10px;\n      padding: 9px 12px;\n      border-radius: 10px;\n      background: #f8fafc;\n      color: #475569;\n      font-size: 13px;\n      font-weight: 600;\n      text-align: center;\n    }\n  </style>" }) %>
 <body>
 <div id="app" v-cloak>
-  <!-- Top bar -->
-  <div class="pos-topbar">
-    <span class="shop-name">🛒 {{ settings.shop_name || 'نظام الكاشير' }}</span>
-    <a href="/products">📦 المنتجات</a>
-    <a href="/low-stock">🚨 قرب النفاد</a>
-    <a href="/invoices">🧾 الفواتير</a>
-    <a href="/warehouses">🏬 المخازن</a>
-    <a href="/settings">⚙️ الإعدادات</a>
-    <button class="logout-btn" @click="doLogout">خروج 🚪</button>
-  </div>
-
-  <div class="pos-layout" style="flex:1;overflow:hidden;">
+  <%- include('partials/pos-navbar') %>
+<div class="pos-layout" style="flex:1;overflow:hidden;">
 
     <!-- ===== Products Panel ===== -->
     <div class="pos-products">
@@ -121,6 +18,7 @@
           id="mainSearch"
         />
         <button class="btn btn-outline btn-sm" @click="clearSearch" v-if="searchQuery" title="مسح">✕</button>
+        <button class="btn btn-outline btn-sm" @click="openScanner" title="فتح الكاميرا">📷</button>
         <button class="btn btn-outline btn-sm" @click="reloadProducts" title="تحديث">🔄</button>
       </div>
 
@@ -328,6 +226,29 @@
     </div>
   </div>
 
+  <!-- ===== Camera Scanner Modal ===== -->
+  <div class="modal-overlay" v-if="showScanner" @click.self="closeScanner">
+    <div class="modal-box scanner-modal">
+      <div class="modal-header">
+        <h5>📷 مسح الباركود</h5>
+        <button class="btn-close" @click="closeScanner">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="scanner-view">
+          <video ref="scannerVideo" autoplay playsinline muted></video>
+          <div class="scanner-frame"></div>
+        </div>
+        <div class="scanner-status">{{ scannerStatus }}</div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" @click="closeScanner">إغلاق</button>
+        <button class="btn btn-primary" @click="startScanner" :disabled="scannerActive">
+          تشغيل الكاميرا
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- ===== Receipt (for printing) ===== -->
   <div id="receipt" class="thermal-print-root" v-if="lastInvoice">
     <div class="receipt-shell">
@@ -507,8 +428,16 @@ createApp({
     const cartItems      = ref([]);
     const discount       = ref(0);
     const searchInput    = ref(null);
+    const scannerVideo   = ref(null);
     const todayStats     = ref({});
     const currentUser    = ref(null);
+    const showScanner    = ref(false);
+    const scannerStatus  = ref('وجّه الكاميرا على الباركود');
+    const scannerActive  = ref(false);
+    let scannerStream = null;
+    let scannerDetector = null;
+    let scannerFrameId = null;
+    let scannerClosing = false;
 
     // Payment
     const showPayment   = ref(false);
@@ -633,6 +562,110 @@ createApp({
       }
     }
 
+    function findProductByBarcode(code) {
+      const normalized = String(code || '').trim();
+      if (!normalized) return null;
+      return allProducts.value.find(p => String(p.barcode || '').trim() === normalized);
+    }
+
+    function handleScannedCode(code) {
+      const normalized = String(code || '').trim();
+      if (!normalized) return;
+
+      const product = findProductByBarcode(normalized);
+      if (product) {
+        addToInvoice(product);
+        showToast(`تمت إضافة: ${product.name}`, 'success');
+        closeScanner();
+        return;
+      }
+
+      searchQuery.value = normalized;
+      scannerStatus.value = `لم يتم العثور على منتج بالباركود: ${normalized}`;
+      showToast('لم يتم العثور على منتج بهذا الباركود', 'error');
+      closeScanner();
+    }
+
+    async function openScanner() {
+      showScanner.value = true;
+      scannerStatus.value = 'جاري فتح الكاميرا...';
+      scannerClosing = false;
+      await nextTick();
+      startScanner();
+    }
+
+    async function startScanner() {
+      if (scannerActive.value) return;
+
+      if (!('BarcodeDetector' in window)) {
+        scannerStatus.value = 'المتصفح لا يدعم قراءة الباركود بالكاميرا. جرّب Chrome أو Edge.';
+        return;
+      }
+
+      if (!navigator.mediaDevices?.getUserMedia) {
+        scannerStatus.value = 'الكاميرا غير متاحة في هذا المتصفح.';
+        return;
+      }
+
+      try {
+        const preferredFormats = ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'qr_code'];
+        const supportedFormats = BarcodeDetector.getSupportedFormats
+          ? await BarcodeDetector.getSupportedFormats()
+          : preferredFormats;
+        const formats = preferredFormats.filter(format => supportedFormats.includes(format));
+        const detectorOptions = formats.length ? { formats } : undefined;
+        scannerDetector = new BarcodeDetector(detectorOptions);
+        scannerStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } },
+          audio: false
+        });
+        scannerVideo.value.srcObject = scannerStream;
+        await scannerVideo.value.play();
+        scannerActive.value = true;
+        scannerStatus.value = 'وجّه الكاميرا على الباركود';
+        scanCameraFrame();
+      } catch (error) {
+        console.error(error);
+        scannerStatus.value = 'تعذر فتح الكاميرا. تأكد من السماح باستخدام الكاميرا.';
+        scannerActive.value = false;
+      }
+    }
+
+    async function scanCameraFrame() {
+      if (!scannerActive.value || scannerClosing || !scannerDetector || !scannerVideo.value) return;
+
+      try {
+        if (scannerVideo.value.readyState >= 2) {
+          const codes = await scannerDetector.detect(scannerVideo.value);
+          if (codes.length) {
+            handleScannedCode(codes[0].rawValue);
+            return;
+          }
+        }
+      } catch (error) {
+        console.error(error);
+      }
+
+      scannerFrameId = requestAnimationFrame(scanCameraFrame);
+    }
+
+    function closeScanner() {
+      scannerClosing = true;
+      showScanner.value = false;
+      scannerActive.value = false;
+      if (scannerFrameId) {
+        cancelAnimationFrame(scannerFrameId);
+        scannerFrameId = null;
+      }
+      if (scannerStream) {
+        scannerStream.getTracks().forEach(track => track.stop());
+        scannerStream = null;
+      }
+      if (scannerVideo.value) scannerVideo.value.srcObject = null;
+      scannerStatus.value = 'وجّه الكاميرا على الباركود';
+      focusSearch();
+    }
+
     function clearSearch() { searchQuery.value = ''; focusSearch(); }
 
     function addDiscount() {
@@ -755,11 +788,13 @@ createApp({
 
     return {
       settings, allProducts, productsLoaded, searchQuery, searchInput,
+      scannerVideo, showScanner, scannerStatus, scannerActive,
       cartItems, discount, todayStats,
       showPayment, paidDisplay, paymentMethod, saving, lastInvoice, showReceiptPreview, cartItemsSnapshot, receiptMeta,
       subtotal, netTotal, paidAmount, change, quickAmounts, filteredProducts,
       formatMoney, loadProducts, reloadProducts, addToInvoice, removeItem,
       increaseQty, decreaseQty, clearCart, focusSearch, handleSearchEnter, clearSearch,
+      openScanner, startScanner, closeScanner,
       addDiscount, openPayment, numpadPress, setPaid, recalc, paymentMethodLabel, printReceiptNow, completeSale, doLogout,
     };
   }

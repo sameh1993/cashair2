@@ -174,6 +174,8 @@ async function ensureWarehouseSchema() {
       id          INT PRIMARY KEY AUTO_INCREMENT,
       name        VARCHAR(120) NOT NULL,
       code        VARCHAR(40) NOT NULL UNIQUE,
+      warehouse_type ENUM('main','rep') NOT NULL DEFAULT 'rep',
+      rep_code    VARCHAR(40) NULL,
       location    VARCHAR(255),
       notes       TEXT,
       is_primary  TINYINT(1) NOT NULL DEFAULT 0,
@@ -182,6 +184,40 @@ async function ensureWarehouseSchema() {
       updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )
   `);
+
+  const [warehouseTypeColumn] = await db.query(`
+    SELECT COLUMN_NAME
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'warehouses'
+      AND COLUMN_NAME = 'warehouse_type'
+    LIMIT 1
+  `);
+
+  if (!warehouseTypeColumn.length) {
+    await db.query(`
+      ALTER TABLE warehouses
+      ADD COLUMN warehouse_type ENUM('main','rep') NOT NULL DEFAULT 'rep'
+      AFTER code
+    `);
+  }
+
+  const [repCodeColumn] = await db.query(`
+    SELECT COLUMN_NAME
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'warehouses'
+      AND COLUMN_NAME = 'rep_code'
+    LIMIT 1
+  `);
+
+  if (!repCodeColumn.length) {
+    await db.query(`
+      ALTER TABLE warehouses
+      ADD COLUMN rep_code VARCHAR(40) NULL
+      AFTER warehouse_type
+    `);
+  }
 
   await db.query(`
     CREATE TABLE IF NOT EXISTS warehouse_stock (
@@ -314,6 +350,76 @@ async function ensureWarehouseSchema() {
         FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT
     )
   `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS stock_transfers (
+      id                    INT PRIMARY KEY AUTO_INCREMENT,
+      transfer_number       VARCHAR(60) NOT NULL UNIQUE,
+      from_warehouse_id     INT NOT NULL,
+      to_warehouse_id       INT NOT NULL,
+      notes                 TEXT,
+      created_by            INT NULL,
+      created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      KEY idx_stock_transfers_from_created (from_warehouse_id, created_at),
+      KEY idx_stock_transfers_to_created (to_warehouse_id, created_at),
+      CONSTRAINT fk_stock_transfers_from
+        FOREIGN KEY (from_warehouse_id) REFERENCES warehouses(id) ON DELETE RESTRICT,
+      CONSTRAINT fk_stock_transfers_to
+        FOREIGN KEY (to_warehouse_id) REFERENCES warehouses(id) ON DELETE RESTRICT,
+      CONSTRAINT fk_stock_transfers_user
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    )
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS stock_transfer_items (
+      id            INT PRIMARY KEY AUTO_INCREMENT,
+      transfer_id   INT NOT NULL,
+      product_id    INT NOT NULL,
+      product_name  VARCHAR(255) NOT NULL,
+      quantity      DECIMAL(12,3) NOT NULL,
+      unit_price    DECIMAL(12,2) NOT NULL DEFAULT 0,
+      KEY idx_stock_transfer_items_transfer (transfer_id),
+      KEY idx_stock_transfer_items_product (product_id),
+      CONSTRAINT fk_stock_transfer_items_transfer
+        FOREIGN KEY (transfer_id) REFERENCES stock_transfers(id) ON DELETE CASCADE,
+      CONSTRAINT fk_stock_transfer_items_product
+        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT
+    )
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS forecasts (
+      id            INT PRIMARY KEY AUTO_INCREMENT,
+      forecast_number VARCHAR(60) NOT NULL UNIQUE,
+      warehouse_id  INT NOT NULL,
+      period_label  VARCHAR(80) NOT NULL,
+      notes         TEXT,
+      created_by    INT NULL,
+      created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      KEY idx_forecasts_warehouse_created (warehouse_id, created_at),
+      CONSTRAINT fk_forecasts_warehouse
+        FOREIGN KEY (warehouse_id) REFERENCES warehouses(id) ON DELETE RESTRICT,
+      CONSTRAINT fk_forecasts_user
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    )
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS forecast_items (
+      id            INT PRIMARY KEY AUTO_INCREMENT,
+      forecast_id   INT NOT NULL,
+      product_id    INT NOT NULL,
+      product_name  VARCHAR(255) NOT NULL,
+      quantity      DECIMAL(12,3) NOT NULL,
+      KEY idx_forecast_items_forecast (forecast_id),
+      KEY idx_forecast_items_product (product_id),
+      CONSTRAINT fk_forecast_items_forecast
+        FOREIGN KEY (forecast_id) REFERENCES forecasts(id) ON DELETE CASCADE,
+      CONSTRAINT fk_forecast_items_product
+        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT
+    )
+  `);
 }
 
 async function ensureDefaultWarehouse() {
@@ -323,12 +429,17 @@ async function ensureDefaultWarehouse() {
 
   if (!warehouseCount.total) {
     await db.query(`
-      INSERT INTO warehouses (name, code, location, notes, is_primary, active)
-      VALUES ('المخزن الرئيسي', 'MAIN', 'الفرع الرئيسي', 'تم إنشاؤه تلقائيًا', 1, 1)
+      INSERT INTO warehouses (name, code, warehouse_type, location, notes, is_primary, active)
+      VALUES ('المخزن الرئيسي', 'MAIN', 'main', 'الفرع الرئيسي', 'تم إنشاؤه تلقائيًا', 1, 1)
     `);
 
     console.log('ℹ️ تم إنشاء المخزن الرئيسي');
   } else {
+    await db.query(`
+      UPDATE warehouses
+      SET warehouse_type = CASE WHEN is_primary = 1 THEN 'main' ELSE warehouse_type END
+    `);
+
     const [[primaryWarehouse]] = await db.query(
       'SELECT id FROM warehouses WHERE is_primary = 1 LIMIT 1'
     );

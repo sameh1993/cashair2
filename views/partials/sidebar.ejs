@@ -1,0 +1,26 @@
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon">م</div>
+    <div>
+      <div class="logo-text">نظام المخازن</div>
+      <div class="logo-sub"><%= logoSub %></div>
+    </div>
+  </div>
+  <nav class="sidebar-nav">
+    <a href="/pos" class="nav-item <%= activePage === 'pos' ? 'active' : '' %>"><span class="nav-icon">💰</span> الكاشير</a>
+    <a href="/products" class="nav-item <%= activePage === 'products' ? 'active' : '' %>"><span class="nav-icon">📦</span> المنتجات</a>
+    <a href="/low-stock" class="nav-item <%= activePage === 'low-stock' ? 'active' : '' %>"><span class="nav-icon">🚨</span> قرب النفاد</a>
+    <a href="/invoices" class="nav-item <%= activePage === 'invoices' ? 'active' : '' %>"><span class="nav-icon">🧾</span> الفواتير</a>
+    <a href="/warehouses" class="nav-item <%= activePage === 'warehouses' ? 'active' : '' %>"><span class="nav-icon">🏬</span> المخازن</a>
+    <a href="/settings" class="nav-item <%= activePage === 'settings' ? 'active' : '' %>"><span class="nav-icon">⚙️</span> الإعدادات</a>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="user-info">
+      <div class="user-avatar" id="sidebar-avatar">A</div>
+      <div style="min-width:0;flex:1;">
+        <div style="color:#e2e8f0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="sidebar-username">...</div>
+        <button type="button" class="btn-logout-link" onclick="logout()">تسجيل خروج</button>
+      </div>
+    </div>
+  </div>
+</aside>

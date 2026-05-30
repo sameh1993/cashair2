@@ -153,6 +153,21 @@ body {
   font-size: 13px;
 }
 
+.btn-logout-link {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.btn-logout-link:hover {
+  color: #fff;
+}
+
 .user-avatar {
   width: 32px;
   height: 32px;

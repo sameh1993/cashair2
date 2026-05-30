@@ -6,7 +6,7 @@ const {
   MANUAL_DOCUMENT_TYPES,
   createStockCount,
   createStockDocument,
-  getMainWarehouse,
+  createStockTransfer,
   reverseDocument,
   updateStockDocument,
   roundMoney,
@@ -31,6 +31,8 @@ function shouldScopeToUser(req) {
 function normalizeWarehousePayload(body = {}) {
   const name = String(body.name || '').trim();
   const code = String(body.code || '').trim().toUpperCase();
+  const warehouseType = String(body.warehouse_type || 'rep').trim();
+  const repCode = String(body.rep_code || '').trim().toUpperCase();
   const location = String(body.location || '').trim();
   const notes = String(body.notes || '').trim();
 
@@ -42,10 +44,16 @@ function normalizeWarehousePayload(body = {}) {
     return { error: 'كود المخزن يجب أن يحتوي على أحرف وأرقام فقط' };
   }
 
+  if (!['main', 'rep'].includes(warehouseType)) {
+    return { error: 'نوع المخزن غير صالح' };
+  }
+
   return {
     data: {
       name,
       code: code || null,
+      warehouseType,
+      repCode,
       location,
       notes
     }
@@ -251,7 +259,7 @@ router.get('/meta', requireAuth, async (req, res) => {
   try {
     const [warehouses, partners, products] = await Promise.all([
       db.query(
-        'SELECT id, name, code, location, is_primary, active FROM warehouses WHERE active = 1 ORDER BY is_primary DESC, id ASC LIMIT 1'
+        'SELECT id, name, code, warehouse_type, rep_code, location, is_primary, active FROM warehouses WHERE active = 1 ORDER BY is_primary DESC, name ASC'
       ),
       getPartnersWithBalances(),
       db.query(
@@ -283,12 +291,10 @@ router.get('/dashboard', requireAuth, async (req, res) => {
   try {
     const userScoped = shouldScopeToUser(req);
     const userId = req.session.user.id;
-    const mainWarehouse = await getMainWarehouse(db);
-    const mainWarehouseId = mainWarehouse?.id || 0;
     const activityFilter = userScoped ? ' AND created_by = ?' : '';
     const activityParams = userScoped ? [userId] : [];
-    const documentWhereParts = ['d.warehouse_id = ?'];
-    const documentParams = [mainWarehouseId];
+    const documentWhereParts = [];
+    const documentParams = [];
 
     if (userScoped) {
       documentWhereParts.push('d.created_by = ?');
@@ -299,13 +305,15 @@ router.get('/dashboard', requireAuth, async (req, res) => {
 
     const [[summary]] = await db.query(`
       SELECT
-        1 AS warehouses_count,
-        (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE warehouse_id = ?) AS total_stock_quantity,
-        (SELECT COUNT(*) FROM stock_documents WHERE warehouse_id = ? AND DATE(created_at) = CURDATE()${activityFilter}) AS documents_today,
-        (SELECT COUNT(*) FROM stock_counts WHERE warehouse_id = ? AND DATE(created_at) = CURDATE()${activityFilter}) AS counts_today,
+        (SELECT COUNT(*) FROM warehouses WHERE active = 1) AS warehouses_count,
+        (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock) AS total_stock_quantity,
+        (SELECT COUNT(*) FROM stock_documents WHERE DATE(created_at) = CURDATE()${activityFilter}) AS documents_today,
+        (SELECT COUNT(*) FROM stock_counts WHERE DATE(created_at) = CURDATE()${activityFilter}) AS counts_today,
+        (SELECT COUNT(*) FROM stock_transfers WHERE DATE(created_at) = CURDATE()${activityFilter}) AS transfers_today,
+        (SELECT COUNT(*) FROM forecasts WHERE DATE(created_at) = CURDATE()${activityFilter}) AS forecasts_today,
         (SELECT COUNT(*) FROM partners WHERE active = 1 AND type = 'customer') AS customers_count,
         (SELECT COUNT(*) FROM partners WHERE active = 1 AND type = 'supplier') AS suppliers_count
-    `, [mainWarehouseId, mainWarehouseId, ...activityParams, mainWarehouseId, ...activityParams]);
+    `, [...activityParams, ...activityParams, ...activityParams, ...activityParams]);
 
     const [[debtSummary]] = await db.query(`
       SELECT
@@ -357,7 +365,7 @@ router.get('/dashboard', requireAuth, async (req, res) => {
 router.get('/warehouses', requireAuth, async (req, res) => {
   try {
     const [rows] = await db.query(
-      'SELECT * FROM warehouses WHERE active = 1 ORDER BY is_primary DESC, id ASC LIMIT 1'
+      'SELECT * FROM warehouses WHERE active = 1 ORDER BY is_primary DESC, name ASC'
     );
     res.json({ success: true, data: rows });
   } catch (error) {
@@ -368,7 +376,40 @@ router.get('/warehouses', requireAuth, async (req, res) => {
 
 // POST /api/warehouses/warehouses
 router.post('/warehouses', requireAdmin, async (req, res) => {
-  res.status(400).json({ success: false, message: 'النظام مضبوط على مخزن رئيسي واحد فقط' });
+  const payload = normalizeWarehousePayload(req.body);
+  if (payload.error) {
+    return res.status(400).json({ success: false, message: payload.error });
+  }
+
+  try {
+    const code = payload.data.code || `WH-${Date.now().toString().slice(-6)}`;
+    await db.query(
+      `INSERT INTO warehouses
+         (name, code, warehouse_type, rep_code, location, notes, is_primary, active)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+      [
+        payload.data.name,
+        code,
+        payload.data.warehouseType,
+        payload.data.repCode || null,
+        payload.data.location,
+        payload.data.notes,
+        payload.data.warehouseType === 'main' ? 1 : 0
+      ]
+    );
+
+    if (payload.data.warehouseType === 'main') {
+      await db.query('UPDATE warehouses SET is_primary = 0 WHERE code <> ?', [code]);
+    }
+
+    res.status(201).json({ success: true, message: 'تمت إضافة المخزن بنجاح' });
+  } catch (error) {
+    if (error.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ success: false, message: 'كود المخزن مستخدم بالفعل' });
+    }
+    console.error(error);
+    res.status(500).json({ success: false, message: 'فشل في إضافة المخزن' });
+  }
 });
 
 // GET /api/warehouses/partners
@@ -523,12 +564,6 @@ router.get('/balances', requireAuth, async (req, res) => {
   try {
     const whereParts = ['w.active = 1', 'p.active = 1'];
     const params = [];
-    const mainWarehouse = await getMainWarehouse(db);
-    if (mainWarehouse) {
-      whereParts.push('w.id = ?');
-      params.push(mainWarehouse.id);
-    }
-
     if (req.query.search) {
       whereParts.push('(p.name LIKE ? OR IFNULL(p.barcode, "") LIKE ?)');
       params.push(`%${req.query.search}%`, `%${req.query.search}%`);
@@ -569,12 +604,6 @@ router.get('/documents', requireAuth, async (req, res) => {
     if (!isAdminUser) {
       whereParts.push('d.created_by = ?');
       params.push(req.session.user.id);
-    }
-
-    const mainWarehouse = await getMainWarehouse(db);
-    if (mainWarehouse) {
-      whereParts.push('d.warehouse_id = ?');
-      params.push(mainWarehouse.id);
     }
 
     if (MANUAL_DOCUMENT_TYPES.includes(req.query.document_type)) {
@@ -717,12 +746,6 @@ router.get('/stock-counts', requireAuth, async (req, res) => {
       params.push(req.session.user.id);
     }
 
-    const mainWarehouse = await getMainWarehouse(db);
-    if (mainWarehouse) {
-      whereParts.push('c.warehouse_id = ?');
-      params.push(mainWarehouse.id);
-    }
-
     if (req.query.search) {
       whereParts.push('(c.count_number LIKE ? OR IFNULL(w.name, "") LIKE ?)');
       params.push(`%${req.query.search}%`, `%${req.query.search}%`);
@@ -826,14 +849,12 @@ router.post('/documents', requireAuth, async (req, res) => {
 
   try {
     await conn.beginTransaction();
-    const mainWarehouse = await getMainWarehouse(conn, { lock: true });
-    if (!mainWarehouse) {
-      throw new Error('WAREHOUSE_NOT_FOUND');
-    }
+    const warehouseId = parsePositiveInt(req.body.warehouse_id);
+    if (!warehouseId) throw new Error('WAREHOUSE_NOT_FOUND');
 
     const result = await createStockDocument(conn, {
       documentType: payload.data.documentType,
-      warehouseId: mainWarehouse.id,
+      warehouseId,
       partnerId: payload.data.partnerId,
       paidAmount: payload.data.paidAmount,
       notes: payload.data.notes,
@@ -903,10 +924,8 @@ router.put('/documents/:id', requireAuth, async (req, res) => {
 
   try {
     await conn.beginTransaction();
-    const mainWarehouse = await getMainWarehouse(conn, { lock: true });
-    if (!mainWarehouse) {
-      throw new Error('WAREHOUSE_NOT_FOUND');
-    }
+    const warehouseId = parsePositiveInt(req.body.warehouse_id);
+    if (!warehouseId) throw new Error('WAREHOUSE_NOT_FOUND');
 
     const [[existingDocument]] = await conn.query(
       'SELECT * FROM stock_documents WHERE id = ? FOR UPDATE',
@@ -925,7 +944,7 @@ router.put('/documents/:id', requireAuth, async (req, res) => {
 
     const result = await updateStockDocument(conn, documentId, {
       documentType: payload.data.documentType,
-      warehouseId: mainWarehouse.id,
+      warehouseId,
       partnerId: payload.data.partnerId,
       paidAmount: payload.data.paidAmount,
       notes: payload.data.notes,
@@ -1038,13 +1057,11 @@ router.post('/stock-counts', requireAdmin, async (req, res) => {
 
   try {
     await conn.beginTransaction();
-    const mainWarehouse = await getMainWarehouse(conn, { lock: true });
-    if (!mainWarehouse) {
-      throw new Error('WAREHOUSE_NOT_FOUND');
-    }
+    const warehouseId = parsePositiveInt(req.body.warehouse_id);
+    if (!warehouseId) throw new Error('WAREHOUSE_NOT_FOUND');
 
     const result = await createStockCount(conn, {
-      warehouseId: mainWarehouse.id,
+      warehouseId,
       notes: payload.data.notes,
       items: payload.data.items,
       createdBy: req.session.user.id
@@ -1082,6 +1099,242 @@ router.post('/stock-counts', requireAdmin, async (req, res) => {
     res.status(500).json({ success: false, message: 'فشل في حفظ الجرد' });
   } finally {
     conn.release();
+  }
+});
+
+// GET /api/warehouses/transfers
+router.get('/transfers', requireAuth, async (req, res) => {
+  try {
+    const [rows] = await db.query(`
+      SELECT
+        t.*,
+        fw.name AS from_warehouse_name,
+        tw.name AS to_warehouse_name,
+        u.full_name AS created_by_name,
+        COUNT(i.id) AS items_count,
+        COALESCE(SUM(i.quantity), 0) AS total_quantity
+      FROM stock_transfers t
+      INNER JOIN warehouses fw ON fw.id = t.from_warehouse_id
+      INNER JOIN warehouses tw ON tw.id = t.to_warehouse_id
+      LEFT JOIN users u ON u.id = t.created_by
+      LEFT JOIN stock_transfer_items i ON i.transfer_id = t.id
+      GROUP BY t.id
+      ORDER BY t.created_at DESC, t.id DESC
+      LIMIT 200
+    `);
+
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: 'فشل في جلب التحويلات' });
+  }
+});
+
+// POST /api/warehouses/transfers
+router.post('/transfers', requireAuth, async (req, res) => {
+  const fromWarehouseId = parsePositiveInt(req.body.from_warehouse_id);
+  const toWarehouseId = parsePositiveInt(req.body.to_warehouse_id);
+  const notes = String(req.body.notes || '').trim();
+  const normalizedItems = normalizeDocumentItems(req.body.items);
+
+  if (!fromWarehouseId || !toWarehouseId || fromWarehouseId === toWarehouseId) {
+    return res.status(400).json({ success: false, message: 'اختر مخزنين مختلفين للتحويل' });
+  }
+
+  if (normalizedItems.error) {
+    return res.status(400).json({ success: false, message: normalizedItems.error });
+  }
+
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+    const result = await createStockTransfer(conn, {
+      fromWarehouseId,
+      toWarehouseId,
+      notes,
+      items: normalizedItems.data,
+      createdBy: req.session.user.id
+    });
+    await conn.commit();
+
+    res.status(201).json({
+      success: true,
+      data: result,
+      message: 'تم حفظ تحويل المخزون بنجاح'
+    });
+  } catch (error) {
+    await conn.rollback();
+    console.error(error);
+
+    if (error.message === 'WAREHOUSE_NOT_FOUND') {
+      return res.status(404).json({ success: false, message: 'أحد المخازن غير موجود' });
+    }
+    if (error.message?.startsWith('PRODUCT_NOT_FOUND:')) {
+      return res.status(400).json({ success: false, message: `الصنف غير موجود: ${error.message.split(':')[1]}` });
+    }
+    if (error.message?.startsWith('INSUFFICIENT_STOCK:')) {
+      return res.status(400).json({ success: false, message: `الرصيد غير كاف للتحويل: ${error.message.split(':')[1]}` });
+    }
+
+    res.status(500).json({ success: false, message: 'فشل في حفظ التحويل' });
+  } finally {
+    conn.release();
+  }
+});
+
+// GET /api/warehouses/forecasts
+router.get('/forecasts', requireAuth, async (req, res) => {
+  try {
+    const [rows] = await db.query(`
+      SELECT
+        f.*,
+        w.name AS warehouse_name,
+        w.rep_code,
+        u.full_name AS created_by_name,
+        COUNT(i.id) AS items_count,
+        COALESCE(SUM(i.quantity), 0) AS total_quantity
+      FROM forecasts f
+      INNER JOIN warehouses w ON w.id = f.warehouse_id
+      LEFT JOIN users u ON u.id = f.created_by
+      LEFT JOIN forecast_items i ON i.forecast_id = f.id
+      GROUP BY f.id
+      ORDER BY f.created_at DESC, f.id DESC
+      LIMIT 200
+    `);
+
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: 'فشل في جلب الفوركاست' });
+  }
+});
+
+// POST /api/warehouses/forecasts
+router.post('/forecasts', requireAuth, async (req, res) => {
+  const warehouseId = parsePositiveInt(req.body.warehouse_id);
+  const periodLabel = String(req.body.period_label || '').trim();
+  const notes = String(req.body.notes || '').trim();
+  const normalizedItems = normalizeDocumentItems(req.body.items);
+
+  if (!warehouseId) {
+    return res.status(400).json({ success: false, message: 'اختر مخزن المندوب' });
+  }
+
+  if (!periodLabel) {
+    return res.status(400).json({ success: false, message: 'اكتب فترة الفوركاست' });
+  }
+
+  if (normalizedItems.error) {
+    return res.status(400).json({ success: false, message: normalizedItems.error });
+  }
+
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const [[warehouse]] = await conn.query(
+      'SELECT id FROM warehouses WHERE id = ? AND active = 1 FOR UPDATE',
+      [warehouseId]
+    );
+
+    if (!warehouse) {
+      await conn.rollback();
+      return res.status(404).json({ success: false, message: 'المخزن غير موجود' });
+    }
+
+    const forecastNumber = `FRC-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Date.now().toString().slice(-6)}`;
+    const [forecastResult] = await conn.query(
+      `INSERT INTO forecasts (forecast_number, warehouse_id, period_label, notes, created_by)
+       VALUES (?, ?, ?, ?, ?)`,
+      [forecastNumber, warehouseId, periodLabel, notes, req.session.user.id]
+    );
+
+    for (const item of normalizedItems.data) {
+      await conn.query(
+        `INSERT INTO forecast_items (forecast_id, product_id, product_name, quantity)
+         VALUES (?, ?, ?, ?)`,
+        [forecastResult.insertId, item.product_id, item.product_name, item.quantity]
+      );
+    }
+
+    await conn.commit();
+    res.status(201).json({
+      success: true,
+      message: 'تم حفظ الفوركاست بنجاح',
+      data: { id: forecastResult.insertId, forecast_number: forecastNumber }
+    });
+  } catch (error) {
+    await conn.rollback();
+    console.error(error);
+    res.status(500).json({ success: false, message: 'فشل في حفظ الفوركاست' });
+  } finally {
+    conn.release();
+  }
+});
+
+// GET /api/warehouses/reports/lost-sales
+router.get('/reports/lost-sales', requireAuth, async (req, res) => {
+  try {
+    const [rows] = await db.query(`
+      SELECT
+        p.id AS product_id,
+        p.name AS product_name,
+        p.barcode,
+        COALESCE(f.forecast_quantity, 0) AS forecast_quantity,
+        COALESCE(s.supplied_quantity, 0) AS supplied_quantity,
+        COALESCE(f.forecast_quantity, 0) - COALESCE(s.supplied_quantity, 0) AS lost_sales_quantity
+      FROM products p
+      LEFT JOIN (
+        SELECT product_id, SUM(quantity) AS forecast_quantity
+        FROM forecast_items
+        GROUP BY product_id
+      ) f ON f.product_id = p.id
+      LEFT JOIN (
+        SELECT i.product_id, SUM(i.quantity) AS supplied_quantity
+        FROM stock_document_items i
+        INNER JOIN stock_documents d ON d.id = i.document_id
+        WHERE d.document_type = 'addition'
+        GROUP BY i.product_id
+      ) s ON s.product_id = p.id
+      WHERE p.active = 1
+        AND (COALESCE(f.forecast_quantity, 0) <> 0 OR COALESCE(s.supplied_quantity, 0) <> 0)
+      ORDER BY lost_sales_quantity DESC, p.name ASC
+    `);
+
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: 'فشل في تحميل تقرير فاقد البيع' });
+  }
+});
+
+// GET /api/warehouses/reports/forecast-matrix
+router.get('/reports/forecast-matrix', requireAuth, async (req, res) => {
+  try {
+    const [rows] = await db.query(`
+      SELECT
+        w.id AS warehouse_id,
+        w.name AS warehouse_name,
+        w.rep_code,
+        p.id AS product_id,
+        p.name AS product_name,
+        COALESCE(SUM(fi.quantity), 0) AS forecast_quantity
+      FROM warehouses w
+      CROSS JOIN products p
+      LEFT JOIN forecasts f ON f.warehouse_id = w.id
+      LEFT JOIN forecast_items fi ON fi.forecast_id = f.id AND fi.product_id = p.id
+      WHERE w.active = 1
+        AND w.warehouse_type = 'rep'
+        AND p.active = 1
+      GROUP BY w.id, p.id
+      HAVING forecast_quantity <> 0
+      ORDER BY w.rep_code ASC, w.name ASC, p.name ASC
+    `);
+
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: 'فشل في تحميل تقرير الفوركاست' });
   }
 });
 

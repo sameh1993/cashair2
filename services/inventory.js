@@ -77,6 +77,10 @@ function generateDocumentNumber(documentType = 'generic') {
   return generateReferenceNumber(prefix);
 }
 
+function generateTransferNumber() {
+  return generateReferenceNumber('TRF');
+}
+
 async function getSetting(conn, key) {
   const [[row]] = await conn.query(
     'SELECT `value` FROM settings WHERE `key` = ? LIMIT 1',
@@ -768,10 +772,96 @@ async function createStockCount(conn, payload) {
   };
 }
 
+async function createStockTransfer(conn, payload) {
+  const fromWarehouseId = Number(payload.fromWarehouseId);
+  const toWarehouseId = Number(payload.toWarehouseId);
+
+  if (!Number.isInteger(fromWarehouseId) || fromWarehouseId <= 0 ||
+      !Number.isInteger(toWarehouseId) || toWarehouseId <= 0 ||
+      fromWarehouseId === toWarehouseId) {
+    throw new Error('INVALID_TRANSFER_WAREHOUSES');
+  }
+
+  const [warehouses] = await conn.query(
+    'SELECT * FROM warehouses WHERE id IN (?) AND active = 1 FOR UPDATE',
+    [[fromWarehouseId, toWarehouseId]]
+  );
+  const warehouseMap = new Map(warehouses.map((warehouse) => [Number(warehouse.id), warehouse]));
+
+  if (!warehouseMap.has(fromWarehouseId) || !warehouseMap.has(toWarehouseId)) {
+    throw new Error('WAREHOUSE_NOT_FOUND');
+  }
+
+  const normalizedItems = normalizeDocumentItemsPayload(payload.items);
+  const productIds = normalizedItems.map((item) => item.product_id);
+
+  await ensureWarehouseStockRows(conn, fromWarehouseId, productIds);
+  await ensureWarehouseStockRows(conn, toWarehouseId, productIds);
+
+  const sourceProducts = await getLockedWarehouseProducts(conn, fromWarehouseId, productIds);
+  const productMap = new Map(sourceProducts.map((row) => [Number(row.product_id), row]));
+
+  for (const item of normalizedItems) {
+    const product = productMap.get(item.product_id);
+    if (!product) {
+      throw new Error(`PRODUCT_NOT_FOUND:${item.product_name}`);
+    }
+
+    if (roundQty(product.quantity) < item.quantity) {
+      throw new Error(`INSUFFICIENT_STOCK:${product.name}`);
+    }
+  }
+
+  const transferNumber = payload.transferNumber || generateTransferNumber();
+  const [transferResult] = await conn.query(
+    `INSERT INTO stock_transfers
+       (transfer_number, from_warehouse_id, to_warehouse_id, notes, created_by)
+     VALUES (?, ?, ?, ?, ?)`,
+    [
+      transferNumber,
+      fromWarehouseId,
+      toWarehouseId,
+      String(payload.notes || '').trim(),
+      payload.createdBy || null
+    ]
+  );
+
+  for (const item of normalizedItems) {
+    await conn.query(
+      `INSERT INTO stock_transfer_items
+         (transfer_id, product_id, product_name, quantity, unit_price)
+       VALUES (?, ?, ?, ?, ?)`,
+      [transferResult.insertId, item.product_id, item.product_name, item.quantity, item.unit_price]
+    );
+
+    await conn.query(
+      `UPDATE warehouse_stock
+       SET quantity = quantity - ?
+       WHERE warehouse_id = ? AND product_id = ?`,
+      [item.quantity, fromWarehouseId, item.product_id]
+    );
+
+    await conn.query(
+      `UPDATE warehouse_stock
+       SET quantity = quantity + ?
+       WHERE warehouse_id = ? AND product_id = ?`,
+      [item.quantity, toWarehouseId, item.product_id]
+    );
+  }
+
+  await syncProductStocks(conn, productIds);
+
+  return {
+    id: transferResult.insertId,
+    transfer_number: transferNumber
+  };
+}
+
 module.exports = {
   DOCUMENT_TYPES,
   MANUAL_DOCUMENT_TYPES,
   createStockDocument,
+  createStockTransfer,
   createStockCount,
   generateDocumentNumber,
   getPrimaryWarehouse,

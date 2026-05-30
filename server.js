@@ -14,6 +14,9 @@ const DB_NAME = process.env.DB_NAME || 'cashier_db';
 const DB_HOST = process.env.DB_HOST || 'localhost';
 let schemaReady;
 
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views'));
+
 function ensureSchemaOnce() {
   if (!schemaReady) {
     schemaReady = ensureSchema().catch((error) => {
@@ -63,9 +66,7 @@ app.use('/api/settings', require('./routes/settings'));
 app.use('/api/warehouses', require('./routes/warehouses'));
 
 // ==================== Page Routes ====================
-const protectedPages = ['/pos', '/products', '/low-stock', '/invoices', '/warehouses', '/settings'];
-
-// Middleware لحماية صفحات HTML
+// Middleware لحماية صفحات التطبيق
 function requireSession(req, res, next) {
   if (req.session && req.session.user) return next();
   res.redirect('/');
@@ -73,15 +74,15 @@ function requireSession(req, res, next) {
 
 app.get('/', (req, res) => {
   if (req.session?.user) return res.redirect('/pos');
-  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+  res.render('login');
 });
 
-app.get('/pos', requireSession, (req, res) => res.sendFile(path.join(__dirname, 'public', 'pos.html')));
-app.get('/products', requireSession, (req, res) => res.sendFile(path.join(__dirname, 'public', 'products.html')));
-app.get('/low-stock', requireSession, (req, res) => res.sendFile(path.join(__dirname, 'public', 'low-stock.html')));
-app.get('/invoices', requireSession, (req, res) => res.sendFile(path.join(__dirname, 'public', 'invoices.html')));
-app.get('/warehouses', requireSession, (req, res) => res.sendFile(path.join(__dirname, 'public', 'warehouses.html')));
-app.get('/settings', requireSession, (req, res) => res.sendFile(path.join(__dirname, 'public', 'settings.html')));
+app.get('/pos', requireSession, (req, res) => res.render('pos'));
+app.get('/products', requireSession, (req, res) => res.render('products'));
+app.get('/low-stock', requireSession, (req, res) => res.render('low-stock'));
+app.get('/invoices', requireSession, (req, res) => res.render('invoices'));
+app.get('/warehouses', requireSession, (req, res) => res.render('warehouses'));
+app.get('/settings', requireSession, (req, res) => res.render('settings'));
 
 // Recovery route: recreate/fix default admin login.
 app.all('/resolve', async (req, res) => {

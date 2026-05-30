@@ -1,48 +1,16 @@
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>المنتجات | نظام الكاشير</title>
-  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css">
-  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-</head>
+<%- include('partials/head', { title: "المنتجات | نظام الكاشير", useVue: true, extraHead: "" }) %>
 <body>
 <div id="app" class="app-layout" v-cloak>
 
   <!-- Sidebar -->
-  <aside class="sidebar">
-    <div class="sidebar-logo">
-      <div class="logo-icon">🛒</div>
-      <div><div class="logo-text">نظام الكاشير</div><div class="logo-sub">إدارة المنتجات</div></div>
-    </div>
-    <nav class="sidebar-nav">
-      <a href="/pos"      class="nav-item"><span class="nav-icon">💰</span> الكاشير</a>
-      <a href="/products" class="nav-item active"><span class="nav-icon">📦</span> المنتجات</a>
-      <a href="/low-stock" class="nav-item"><span class="nav-icon">🚨</span> قرب النفاد</a>
-      <a href="/invoices" class="nav-item"><span class="nav-icon">🧾</span> الفواتير</a>
-      <a href="/warehouses" class="nav-item"><span class="nav-icon">🏬</span> المخازن</a>
-      <a href="/settings" class="nav-item"><span class="nav-icon">⚙️</span> الإعدادات</a>
-    </nav>
-    <div class="sidebar-footer">
-      <div class="user-info">
-        <div class="user-avatar" id="sidebar-avatar">A</div>
-        <div style="min-width:0;flex:1;">
-          <div style="color:#e2e8f0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="sidebar-username">...</div>
-          <div style="font-size:11px;cursor:pointer;" @click="doLogout">تسجيل خروج</div>
-        </div>
-      </div>
-    </div>
-  </aside>
-
-  <!-- Main -->
+  <%- include('partials/sidebar', { activePage: 'products', logoSub: 'إدارة المنتجات' }) %>
+<!-- Main -->
   <div class="main-content">
-    <div class="topbar">
+    <%- include('partials/topbar', { content: `
       <div class="topbar-title">📦 إدارة المنتجات</div>
       <input type="text" class="form-control" style="width:220px;" placeholder="🔍 بحث..." v-model="search">
       <button class="btn btn-primary" @click="openAdd">+ إضافة منتج</button>
-    </div>
+    ` }) %>
     <div class="page-body">
 
       <div class="card">

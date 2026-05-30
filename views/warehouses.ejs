@@ -1,0 +1,279 @@
+<%- include('partials/head', { title: "إدارة المخازن والمناديب", extraHead: `
+  <style>
+    .warehouse-page .nav-pills .nav-link { border-radius: 8px; color: #334155; font-weight: 700; }
+    .warehouse-page .nav-pills .nav-link.active { background: var(--primary); }
+    .warehouse-page .mini-label { color: #64748b; font-size: 12px; }
+    .warehouse-page .metric-card { min-height: 92px; }
+    .warehouse-page .table-responsive { border-radius: 10px; border: 1px solid #e2e8f0; }
+    .warehouse-page .table { margin-bottom: 0; vertical-align: middle; }
+    .warehouse-page .table thead th { background: #f8fafc; color: #64748b; font-size: 12px; white-space: nowrap; }
+    .warehouse-page .item-row { border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; margin-bottom: 8px; background: #f8fafc; }
+    .warehouse-page .form-control, .warehouse-page .form-select { border-radius: 8px; font-size: 13px; }
+    .warehouse-page .btn { border-radius: 8px; }
+    .warehouse-page .report-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; }
+  </style>
+` }) %>
+<body>
+<div id="app" class="app-layout warehouse-page">
+  <%- include('partials/sidebar', { activePage: 'warehouses', logoSub: 'مخازن ومناديب' }) %>
+
+  <main class="main-content">
+    <%- include('partials/topbar', { content: `
+      <div class="topbar-title">إدارة المخازن والمناديب</div>
+      <button class="btn btn-outline" id="refreshButton" type="button">تحديث</button>
+    ` }) %>
+
+    <section class="page-body">
+      <div class="row g-3 mb-3" id="statsGrid"></div>
+
+      <div class="card mb-3">
+        <div class="card-body">
+          <ul class="nav nav-pills gap-2 flex-wrap" id="warehouseTabs">
+            <li class="nav-item"><button class="nav-link active" data-section="documents" type="button">أذونات التوريد والصرف</button></li>
+            <li class="nav-item"><button class="nav-link" data-section="transfers" type="button">تحويلات المخازن</button></li>
+            <li class="nav-item"><button class="nav-link" data-section="forecasts" type="button">فوركاست المناديب</button></li>
+            <li class="nav-item"><button class="nav-link" data-section="balances" type="button">رصيد المخزن</button></li>
+            <li class="nav-item"><button class="nav-link" data-section="reports" type="button">التقارير</button></li>
+            <li class="nav-item"><button class="nav-link" data-section="setup" type="button">الإعدادات الأساسية</button></li>
+          </ul>
+        </div>
+      </div>
+
+      <section class="warehouse-section" data-section="documents">
+        <div class="row g-3">
+          <div class="col-lg-5">
+            <div class="card">
+              <div class="card-header"><h5>إذن توريد / صرف</h5></div>
+              <div class="card-body">
+                <div class="row g-2">
+                  <div class="col-md-6">
+                    <label class="form-label">نوع الإذن</label>
+                    <select class="form-select" id="documentType"></select>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label">المخزن</label>
+                    <select class="form-select" id="documentWarehouse"></select>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label" id="documentPartnerLabel">الطرف</label>
+                    <select class="form-select" id="documentPartner"></select>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label">المبلغ المسدد</label>
+                    <input class="form-control" id="documentPaid" type="number" min="0" step="0.01">
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label">ملاحظات</label>
+                    <textarea class="form-control" id="documentNotes" rows="2"></textarea>
+                  </div>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center mt-3 mb-2">
+                  <strong>الأصناف</strong>
+                  <button class="btn btn-sm btn-outline" id="documentAddItem" type="button">إضافة صنف</button>
+                </div>
+                <div id="documentItems"></div>
+                <div class="alert alert-danger d-none mt-2" id="documentError"></div>
+
+                <div class="report-box mt-3">
+                  <div class="d-flex justify-content-between"><span>إجمالي الإذن</span><strong id="documentTotal">0</strong></div>
+                  <div class="d-flex justify-content-between"><span>أثر المديونية</span><strong id="documentDebt">0</strong></div>
+                </div>
+
+                <button class="btn btn-primary w-100 mt-3" id="documentSaveButton" type="button">حفظ الإذن</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-lg-7">
+            <div class="card">
+              <div class="card-header"><h5>سجل الأذونات</h5></div>
+              <div class="card-body">
+                <div class="table-responsive">
+                  <table class="table table-hover text-center">
+                    <thead><tr><th>الرقم</th><th>النوع</th><th>المخزن</th><th>الطرف</th><th>الإجمالي</th><th>التاريخ</th></tr></thead>
+                    <tbody id="documentsBody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="warehouse-section d-none" data-section="transfers">
+        <div class="row g-3">
+          <div class="col-lg-5">
+            <div class="card">
+              <div class="card-header"><h5>إذن تحويل من مخزن لمخزن</h5></div>
+              <div class="card-body">
+                <div class="row g-2">
+                  <div class="col-md-6">
+                    <label class="form-label">من مخزن</label>
+                    <select class="form-select" id="transferFrom"></select>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label">إلى مخزن</label>
+                    <select class="form-select" id="transferTo"></select>
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label">ملاحظات</label>
+                    <textarea class="form-control" id="transferNotes" rows="2"></textarea>
+                  </div>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mt-3 mb-2">
+                  <strong>أصناف التحويل</strong>
+                  <button class="btn btn-sm btn-outline" id="transferAddItem" type="button">إضافة صنف</button>
+                </div>
+                <div id="transferItems"></div>
+                <div class="alert alert-danger d-none mt-2" id="transferError"></div>
+                <button class="btn btn-primary w-100 mt-3" id="transferSaveButton" type="button">حفظ التحويل</button>
+              </div>
+            </div>
+          </div>
+          <div class="col-lg-7">
+            <div class="card">
+              <div class="card-header"><h5>سجل التحويلات</h5></div>
+              <div class="card-body">
+                <div class="table-responsive">
+                  <table class="table table-hover text-center">
+                    <thead><tr><th>الرقم</th><th>من</th><th>إلى</th><th>عدد الأصناف</th><th>إجمالي الكمية</th><th>التاريخ</th></tr></thead>
+                    <tbody id="transfersBody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="warehouse-section d-none" data-section="forecasts">
+        <div class="row g-3">
+          <div class="col-lg-5">
+            <div class="card">
+              <div class="card-header"><h5>تسجيل فوركاست مندوب</h5></div>
+              <div class="card-body">
+                <label class="form-label">مخزن المندوب</label>
+                <select class="form-select mb-2" id="forecastWarehouse"></select>
+                <label class="form-label">الفترة</label>
+                <input class="form-control mb-2" id="forecastPeriod" placeholder="مثال: يونيو 2026">
+                <label class="form-label">ملاحظات</label>
+                <textarea class="form-control" id="forecastNotes" rows="2"></textarea>
+                <div class="d-flex justify-content-between align-items-center mt-3 mb-2">
+                  <strong>الأصناف المطلوبة</strong>
+                  <button class="btn btn-sm btn-outline" id="forecastAddItem" type="button">إضافة صنف</button>
+                </div>
+                <div id="forecastItems"></div>
+                <div class="alert alert-danger d-none mt-2" id="forecastError"></div>
+                <button class="btn btn-primary w-100 mt-3" id="forecastSaveButton" type="button">حفظ الفوركاست</button>
+              </div>
+            </div>
+          </div>
+          <div class="col-lg-7">
+            <div class="card">
+              <div class="card-header"><h5>سجل الفوركاست</h5></div>
+              <div class="card-body">
+                <div class="table-responsive">
+                  <table class="table table-hover text-center">
+                    <thead><tr><th>الرقم</th><th>المندوب</th><th>الفترة</th><th>الأصناف</th><th>الكمية</th><th>التاريخ</th></tr></thead>
+                    <tbody id="forecastsBody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="warehouse-section d-none" data-section="balances">
+        <div class="card">
+          <div class="card-header"><h5>تقرير رصيد أي مخزن</h5></div>
+          <div class="card-body">
+            <div class="row g-2 mb-3">
+              <div class="col-md-4"><select class="form-select" id="balanceWarehouseFilter"></select></div>
+              <div class="col-md-8"><input class="form-control" id="balanceSearch" placeholder="بحث بالصنف أو الباركود"></div>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-hover text-center">
+                <thead><tr><th>المخزن</th><th>الصنف</th><th>الباركود</th><th>الرصيد</th><th>الوحدة</th><th>القيمة</th></tr></thead>
+                <tbody id="balancesBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="warehouse-section d-none" data-section="reports">
+        <div class="row g-3">
+          <div class="col-lg-6">
+            <div class="card">
+              <div class="card-header"><h5>تقرير فاقد البيع</h5></div>
+              <div class="card-body">
+                <div class="table-responsive">
+                  <table class="table table-hover text-center">
+                    <thead><tr><th>الصنف</th><th>الفوركاست</th><th>التوريد الفعلي</th><th>الفرق</th></tr></thead>
+                    <tbody id="lostSalesBody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-lg-6">
+            <div class="card">
+              <div class="card-header"><h5>فوركاست المناديب</h5></div>
+              <div class="card-body">
+                <div class="table-responsive">
+                  <table class="table table-hover text-center">
+                    <thead><tr><th>كود المندوب</th><th>المندوب</th><th>الصنف</th><th>الكمية</th></tr></thead>
+                    <tbody id="forecastMatrixBody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="warehouse-section d-none" data-section="setup">
+        <div class="row g-3">
+          <div class="col-lg-6">
+            <div class="card">
+              <div class="card-header"><h5>إضافة مخزن أو مندوب</h5></div>
+              <div class="card-body">
+                <div class="row g-2">
+                  <div class="col-md-6"><label class="form-label">اسم المخزن</label><input class="form-control" id="warehouseName"></div>
+                  <div class="col-md-6"><label class="form-label">الكود</label><input class="form-control" id="warehouseCode" dir="ltr"></div>
+                  <div class="col-md-6"><label class="form-label">النوع</label><select class="form-select" id="warehouseType"><option value="rep">مخزن مندوب</option><option value="main">مخزن رئيسي</option></select></div>
+                  <div class="col-md-6"><label class="form-label">كود المندوب</label><input class="form-control" id="warehouseRepCode" dir="ltr"></div>
+                  <div class="col-12"><label class="form-label">العنوان / المنطقة</label><input class="form-control" id="warehouseLocation"></div>
+                  <div class="col-12"><label class="form-label">ملاحظات</label><textarea class="form-control" id="warehouseNotes" rows="2"></textarea></div>
+                </div>
+                <button class="btn btn-primary w-100 mt-3" id="warehouseSaveButton" type="button">إضافة المخزن</button>
+              </div>
+            </div>
+          </div>
+          <div class="col-lg-6">
+            <div class="card">
+              <div class="card-header"><h5>إضافة مصنع / عميل</h5></div>
+              <div class="card-body">
+                <div class="row g-2">
+                  <div class="col-md-7"><label class="form-label">الاسم</label><input class="form-control" id="partnerName"></div>
+                  <div class="col-md-5"><label class="form-label">النوع</label><select class="form-select" id="partnerType"><option value="supplier">مصنع / مورد</option><option value="customer">عميل</option></select></div>
+                  <div class="col-md-6"><label class="form-label">الهاتف</label><input class="form-control" id="partnerPhone"></div>
+                  <div class="col-md-6"><label class="form-label">العنوان</label><input class="form-control" id="partnerAddress"></div>
+                </div>
+                <button class="btn btn-primary w-100 mt-3" id="partnerSaveButton" type="button">إضافة الطرف</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </section>
+  </main>
+</div>
+
+<datalist id="productsList"></datalist>
+<script src="/js/app.js"></script>
+<script src="/js/warehouse-system.js"></script>
+</body>
+</html>

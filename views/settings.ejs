@@ -1,43 +1,11 @@
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>الإعدادات | نظام الكاشير</title>
-  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css">
-  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-</head>
+<%- include('partials/head', { title: "الإعدادات | نظام الكاشير", useVue: true, extraHead: "" }) %>
 <body>
 <div id="app" class="app-layout" v-cloak>
-  <aside class="sidebar">
-    <div class="sidebar-logo">
-      <div class="logo-icon">🛒</div>
-      <div><div class="logo-text">نظام الكاشير</div><div class="logo-sub">الإعدادات</div></div>
-    </div>
-    <nav class="sidebar-nav">
-      <a href="/pos"      class="nav-item"><span class="nav-icon">💰</span> الكاشير</a>
-      <a href="/products" class="nav-item"><span class="nav-icon">📦</span> المنتجات</a>
-      <a href="/low-stock" class="nav-item"><span class="nav-icon">🚨</span> قرب النفاد</a>
-      <a href="/invoices" class="nav-item"><span class="nav-icon">🧾</span> الفواتير</a>
-      <a href="/warehouses" class="nav-item"><span class="nav-icon">🏬</span> المخازن</a>
-      <a href="/settings" class="nav-item active"><span class="nav-icon">⚙️</span> الإعدادات</a>
-    </nav>
-    <div class="sidebar-footer">
-      <div class="user-info">
-        <div class="user-avatar" id="sidebar-avatar">A</div>
-        <div style="min-width:0;flex:1;">
-          <div style="color:#e2e8f0;font-size:13px;font-weight:600;" id="sidebar-username">...</div>
-          <div style="font-size:11px;cursor:pointer;" @click="doLogout">تسجيل خروج</div>
-        </div>
-      </div>
-    </div>
-  </aside>
-
-  <div class="main-content">
-    <div class="topbar">
+  <%- include('partials/sidebar', { activePage: 'settings', logoSub: 'الإعدادات' }) %>
+<div class="main-content">
+    <%- include('partials/topbar', { content: `
       <div class="topbar-title">⚙️ الإعدادات</div>
-    </div>
+    ` }) %>
     <div class="page-body" style="max-width:700px;">
 
       <!-- General Settings -->

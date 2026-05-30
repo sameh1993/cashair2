@@ -1,94 +1,11 @@
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>الفواتير | نظام الكاشير</title>
-  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css">
-  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-  <style>
-    .stat-card-action {
-      cursor: pointer;
-      transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
-    }
-    .stat-card-action:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 14px 28px rgba(15, 23, 42, .10);
-      border-color: #bfdbfe;
-    }
-    .stat-card-action.active {
-      border-color: var(--primary);
-      box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);
-    }
-    .quick-filter-bar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      flex-wrap: wrap;
-      padding: 12px 14px;
-      margin-bottom: 14px;
-      border: 1px solid #dbeafe;
-      border-radius: 14px;
-      background: linear-gradient(135deg, #f8fbff 0%, #eef6ff 100%);
-    }
-    .quick-filter-title {
-      font-size: 14px;
-      font-weight: 700;
-      color: #1e3a8a;
-    }
-    .quick-filter-subtitle {
-      font-size: 12px;
-      color: #64748b;
-      margin-top: 4px;
-    }
-    .quick-filter-metrics {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-    .quick-filter-pill {
-      padding: 7px 12px;
-      border-radius: 999px;
-      background: #fff;
-      border: 1px solid #dbeafe;
-      font-size: 12.5px;
-      font-weight: 700;
-      color: #0f172a;
-    }
-  </style>
-</head>
+<%- include('partials/head', { title: "الفواتير | نظام الكاشير", useVue: true, extraHead: "<style>\n    .stat-card-action {\n      cursor: pointer;\n      transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;\n    }\n    .stat-card-action:hover {\n      transform: translateY(-2px);\n      box-shadow: 0 14px 28px rgba(15, 23, 42, .10);\n      border-color: #bfdbfe;\n    }\n    .stat-card-action.active {\n      border-color: var(--primary);\n      box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);\n    }\n    .quick-filter-bar {\n      display: flex;\n      align-items: center;\n      justify-content: space-between;\n      gap: 12px;\n      flex-wrap: wrap;\n      padding: 12px 14px;\n      margin-bottom: 14px;\n      border: 1px solid #dbeafe;\n      border-radius: 14px;\n      background: linear-gradient(135deg, #f8fbff 0%, #eef6ff 100%);\n    }\n    .quick-filter-title {\n      font-size: 14px;\n      font-weight: 700;\n      color: #1e3a8a;\n    }\n    .quick-filter-subtitle {\n      font-size: 12px;\n      color: #64748b;\n      margin-top: 4px;\n    }\n    .quick-filter-metrics {\n      display: flex;\n      gap: 8px;\n      flex-wrap: wrap;\n    }\n    .quick-filter-pill {\n      padding: 7px 12px;\n      border-radius: 999px;\n      background: #fff;\n      border: 1px solid #dbeafe;\n      font-size: 12.5px;\n      font-weight: 700;\n      color: #0f172a;\n    }\n  </style>" }) %>
 <body>
 <div id="app" class="app-layout" v-cloak>
-  <aside class="sidebar">
-    <div class="sidebar-logo">
-      <div class="logo-icon">🛒</div>
-      <div><div class="logo-text">نظام الكاشير</div><div class="logo-sub">الفواتير</div></div>
-    </div>
-    <nav class="sidebar-nav">
-      <a href="/pos"      class="nav-item"><span class="nav-icon">💰</span> الكاشير</a>
-      <a href="/products" class="nav-item"><span class="nav-icon">📦</span> المنتجات</a>
-      <a href="/low-stock" class="nav-item"><span class="nav-icon">🚨</span> قرب النفاد</a>
-      <a href="/invoices" class="nav-item active"><span class="nav-icon">🧾</span> الفواتير</a>
-      <a href="/warehouses" class="nav-item"><span class="nav-icon">🏬</span> المخازن</a>
-      <a href="/settings" class="nav-item"><span class="nav-icon">⚙️</span> الإعدادات</a>
-    </nav>
-    <div class="sidebar-footer">
-      <div class="user-info">
-        <div class="user-avatar" id="sidebar-avatar">A</div>
-        <div style="min-width:0;flex:1;">
-          <div style="color:#e2e8f0;font-size:13px;font-weight:600;" id="sidebar-username">...</div>
-          <div style="font-size:11px;cursor:pointer;" @click="doLogout">تسجيل خروج</div>
-        </div>
-      </div>
-    </div>
-  </aside>
-
-  <div class="main-content">
-    <div class="topbar">
+  <%- include('partials/sidebar', { activePage: 'invoices', logoSub: 'الفواتير' }) %>
+<div class="main-content">
+    <%- include('partials/topbar', { content: `
       <div class="topbar-title">🧾 الفواتير</div>
-    </div>
+    ` }) %>
     <div class="page-body">
 
       <!-- Stats row -->
