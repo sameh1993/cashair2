@@ -1,0 +1,289 @@
+<%- include('partials/head', { title:'العملاء', page:'customers', user:user }) %>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h5 class="mb-0 fw-800">العملاء</h5>
+    <small class="text-muted">إدارة قاعدة العملاء ومتابعة أرصدتهم</small>
+  </div>
+  <button class="btn btn-primary" onclick="openModal()">
+    <i class="bi bi-plus-lg me-1"></i> عميل جديد
+  </button>
+</div>
+
+<!-- KPIs -->
+<div class="row g-3 mb-4" id="kpiRow">
+  <div class="col-6 col-md-3">
+    <div class="kpi-card d-flex align-items-center gap-3">
+      <div class="kpi-icon kpi-blue"><i class="bi bi-people-fill"></i></div>
+      <div>
+        <div class="kpi-label">إجمالي العملاء</div>
+        <div class="kpi-value" id="kpiTotal">—</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="kpi-card d-flex align-items-center gap-3">
+      <div class="kpi-icon kpi-amber"><i class="bi bi-credit-card"></i></div>
+      <div>
+        <div class="kpi-label">عملاء آجل</div>
+        <div class="kpi-value" id="kpiCredit">—</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="kpi-card d-flex align-items-center gap-3">
+      <div class="kpi-icon kpi-green"><i class="bi bi-cash-stack"></i></div>
+      <div>
+        <div class="kpi-label">عملاء نقدي</div>
+        <div class="kpi-value" id="kpiCash">—</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Search + Table -->
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <span><i class="bi bi-people text-primary"></i> قائمة العملاء</span>
+    <div class="d-flex gap-2">
+      <select class="form-select form-select-sm" style="width:130px" id="typeFilter" onchange="load()">
+        <option value="">الكل</option>
+        <option value="cash">نقدي</option>
+        <option value="credit">آجل</option>
+      </select>
+      <div class="input-group input-group-sm" style="width:200px">
+        <input type="text" class="form-control" placeholder="بحث باسم أو تليفون..." id="searchInput" oninput="debounceLoad()">
+        <span class="input-group-text"><i class="bi bi-search"></i></span>
+      </div>
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>الاسم</th>
+          <th>التليفون</th>
+          <th>النوع</th>
+          <th>تاريخ الإضافة</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="tableBody">
+        <tr><td colspan="6" class="text-center text-muted py-4">جاري التحميل...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modal إضافة/تعديل -->
+<div class="modal fade" id="customerModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title" id="modalTitle">عميل جديد</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="editId">
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="form-label">الاسم <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="fName" placeholder="اسم العميل">
+          </div>
+          <div class="col-6">
+            <label class="form-label">التليفون</label>
+            <input type="tel" class="form-control" id="fPhone" placeholder="01xxxxxxxxx">
+          </div>
+          <div class="col-6">
+            <label class="form-label">نوع العميل</label>
+            <select class="form-select" id="fType">
+              <option value="cash">نقدي</option>
+              <option value="credit">آجل</option>
+            </select>
+          </div>
+          <div class="col-12">
+            <label class="form-label">العنوان</label>
+            <input type="text" class="form-control" id="fAddress" placeholder="العنوان">
+          </div>
+          <div class="col-12">
+            <label class="form-label">ملاحظات</label>
+            <textarea class="form-control" id="fNotes" rows="2"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+        <button class="btn btn-primary" onclick="save()"><i class="bi bi-check2 me-1"></i>حفظ</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal تفاصيل عميل -->
+<div class="modal fade" id="detailModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title"><i class="bi bi-person-circle me-2"></i><span id="detailName"></span></h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="detailBody">
+        <div class="text-center py-4"><div class="spinner-border text-primary"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let debTimer;
+const modal = new bootstrap.Modal(document.getElementById('customerModal'));
+const detailModal = new bootstrap.Modal(document.getElementById('detailModal'));
+
+async function load() {
+  const q    = document.getElementById('searchInput').value;
+  const type = document.getElementById('typeFilter').value;
+  const params = new URLSearchParams();
+  if (q)    params.set('q', q);
+  if (type) params.set('type', type);
+
+  const r = await fetch('/api/customers?' + params);
+  const { data } = await r.json();
+
+  // KPIs
+  document.getElementById('kpiTotal').textContent   = data.length;
+  document.getElementById('kpiCredit').textContent  = data.filter(c=>c.customer_type==='credit').length;
+  document.getElementById('kpiCash').textContent    = data.filter(c=>c.customer_type==='cash' && c.id>1).length;
+
+  const tb = document.getElementById('tableBody');
+  if (!data.length) {
+    tb.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">لا يوجد عملاء</td></tr>';
+    return;
+  }
+
+  tb.innerHTML = data.map(c => `
+    <tr>
+      <td class="text-muted">${c.id}</td>
+      <td>
+        <strong>${c.name}</strong>
+        ${c.id==1?'<span class="badge badge-cash ms-1">افتراضي</span>':''}
+      </td>
+      <td>${c.phone||'—'}</td>
+      <td>
+        <span class="badge ${c.customer_type==='credit'?'badge-pending':'badge-cash'} px-2 py-1">
+          ${c.customer_type==='credit'?'آجل':'نقدي'}
+        </span>
+      </td>
+      <td class="text-muted">${fmtDate(c.created_at)}</td>
+      <td>
+        <button class="btn btn-sm btn-outline-primary" onclick="showDetail(${c.id},'${c.name}')">
+          <i class="bi bi-eye"></i>
+        </button>
+        ${c.id>1?`
+        <button class="btn btn-sm btn-outline-secondary ms-1" onclick="edit(${c.id})">
+          <i class="bi bi-pencil"></i>
+        </button>
+        <button class="btn btn-sm btn-outline-danger ms-1" onclick="del(${c.id},'${c.name}')">
+          <i class="bi bi-trash"></i>
+        </button>`:''}
+      </td>
+    </tr>`).join('');
+
+}
+
+function debounceLoad() {
+  clearTimeout(debTimer);
+  debTimer = setTimeout(load, 350);
+}
+
+function openModal(id) {
+  document.getElementById('editId').value   = '';
+  document.getElementById('fName').value    = '';
+  document.getElementById('fPhone').value   = '';
+  document.getElementById('fAddress').value = '';
+  document.getElementById('fNotes').value   = '';
+  document.getElementById('fType').value    = 'cash';
+  document.getElementById('modalTitle').textContent = 'عميل جديد';
+  modal.show();
+}
+
+async function edit(id) {
+  const r = await fetch(`/api/customers/${id}`);
+  const { data } = await r.json();
+  document.getElementById('editId').value   = id;
+  document.getElementById('fName').value    = data.name;
+  document.getElementById('fPhone').value   = data.phone;
+  document.getElementById('fAddress').value = data.address;
+  document.getElementById('fNotes').value   = data.notes||'';
+  document.getElementById('fType').value    = data.customer_type;
+  document.getElementById('modalTitle').textContent = 'تعديل العميل';
+  modal.show();
+}
+
+async function save() {
+  const id   = document.getElementById('editId').value;
+  const body = {
+    name:          document.getElementById('fName').value.trim(),
+    phone:         document.getElementById('fPhone').value.trim(),
+    address:       document.getElementById('fAddress').value.trim(),
+    customer_type: document.getElementById('fType').value,
+    notes:         document.getElementById('fNotes').value.trim()
+  };
+  if (!body.name) { toast('الاسم مطلوب','error'); return; }
+
+  const r = await api(id?'PUT':'POST', id?`/api/customers/${id}`:'/api/customers', body);
+  if (r.success) {
+    toast(r.message); modal.hide(); load();
+  } else {
+    toast(r.message,'error');
+  }
+}
+
+async function del(id, name) {
+  if (!confirm(`حذف العميل "${name}"؟`)) return;
+  const r = await api('DELETE', `/api/customers/${id}`);
+  if (r.success) { toast(r.message); load(); }
+  else toast(r.message,'error');
+}
+
+async function showDetail(id, name) {
+  document.getElementById('detailName').textContent = name;
+  document.getElementById('detailBody').innerHTML =
+    '<div class="text-center py-4"><div class="spinner-border text-primary"></div></div>';
+  detailModal.show();
+
+  const r = await fetch(`/api/customers/${id}`);
+  const { data } = await r.json();
+
+  document.getElementById('detailBody').innerHTML = `
+    <div class="row g-3 mb-3">
+      <div class="col-sm-6">
+        <div class="kpi-card">
+          <div class="kpi-label">إجمالي مشتريات</div>
+          <div class="kpi-value text-primary">${data.invoices?.length||0} فاتورة</div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><i class="bi bi-receipt text-primary"></i> آخر الفواتير</div>
+      <div class="table-responsive">
+        <table class="table mb-0">
+          <thead><tr><th>#</th><th>الإجمالي</th><th>طريقة الدفع</th><th>التاريخ</th></tr></thead>
+          <tbody>
+            ${(data.invoices||[]).map(inv=>`
+              <tr>
+                <td>${inv.id}</td>
+                <td><strong>${fmt(inv.total)}</strong></td>
+                <td>${inv.payment_method||'نقدي'}</td>
+                <td class="text-muted">${fmtDate(inv.created_at)}</td>
+              </tr>`).join('') || '<tr><td colspan="4" class="text-center text-muted py-3">لا يوجد فواتير</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+load();
+</script>
+
+<%- include('partials/foot') %>

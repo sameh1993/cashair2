@@ -1,0 +1,428 @@
+<%- include('partials/head', { title:'التقارير', page:'reports', user:user }) %>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h5 class="mb-0 fw-800">التقارير</h5>
+    <small class="text-muted">تقارير الأرباح والخسائر وتحليل الأصناف</small>
+  </div>
+</div>
+
+<!-- Main Tabs -->
+<ul class="nav nav-tabs mb-4">
+  <li class="nav-item"><a class="nav-link active" href="#" onclick="switchTab('pl',this)"><i class="bi bi-graph-up-arrow me-1"></i>الأرباح والخسائر</a></li>
+  <li class="nav-item"><a class="nav-link" href="#" onclick="switchTab('products',this)"><i class="bi bi-box-seam me-1"></i>تقرير الأصناف</a></li>
+  <li class="nav-item"><a class="nav-link" href="#" onclick="switchTab('expenses',this)"><i class="bi bi-wallet2 me-1"></i>المصروفات</a></li>
+</ul>
+
+<!-- ══ Tab: P&L ══ -->
+<div id="tab-pl">
+  <div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <span><i class="bi bi-graph-up-arrow text-primary"></i> قائمة الأرباح والخسائر</span>
+      <div class="d-flex gap-2 align-items-center">
+        <input type="date" class="form-control form-control-sm" id="plFrom" onchange="loadPL()">
+        <span class="text-muted">إلى</span>
+        <input type="date" class="form-control form-control-sm" id="plTo"   onchange="loadPL()">
+      </div>
+    </div>
+    <div class="card-body" id="plBody">
+      <div class="text-center py-4"><div class="spinner-border text-primary"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Tab: Products ══ -->
+<div id="tab-products" style="display:none">
+  <div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <span><i class="bi bi-bar-chart text-primary"></i> تحليل الأصناف</span>
+      <div class="d-flex gap-2 align-items-center">
+        <input type="date" class="form-control form-control-sm" id="prodFrom" onchange="loadProducts()">
+        <span class="text-muted">إلى</span>
+        <input type="date" class="form-control form-control-sm" id="prodTo"   onchange="loadProducts()">
+      </div>
+    </div>
+    <div class="card-body pb-0" id="prodSummary"></div>
+  </div>
+
+  <!-- Top Sellers -->
+  <div class="card mb-4">
+    <div class="card-header" style="background:var(--primary-light)">
+      <i class="bi bi-trophy-fill text-warning me-1"></i>
+      <span class="fw-700">الأكثر مبيعاً</span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead><tr><th>الترتيب</th><th>الصنف</th><th>كمية مباعة</th><th>الإيراد</th><th>مرات البيع</th><th>المخزون الحالي</th></tr></thead>
+        <tbody id="topSellersBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Dormant -->
+  <div class="card">
+    <div class="card-header" style="background:#fff3cd">
+      <i class="bi bi-archive text-warning me-1"></i>
+      <span class="fw-700">الأصناف الراكدة</span>
+      <small class="text-muted me-2">(لا مبيعات في الفترة المحددة)</small>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead><tr><th>الصنف</th><th>الباركود</th><th>سعر البيع</th><th>المخزون</th><th>قيمة المخزون</th></tr></thead>
+        <tbody id="dormantBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Tab: Expenses ══ -->
+<div id="tab-expenses" style="display:none">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div></div>
+    <button class="btn btn-primary btn-sm" onclick="openExpenseModal()">
+      <i class="bi bi-plus me-1"></i>إضافة مصروف
+    </button>
+  </div>
+  <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <span><i class="bi bi-wallet2 text-primary"></i> المصروفات</span>
+      <div class="d-flex gap-2 align-items-center">
+        <input type="date" class="form-control form-control-sm" id="expFrom" onchange="loadExpenses()">
+        <span class="text-muted">إلى</span>
+        <input type="date" class="form-control form-control-sm" id="expTo"   onchange="loadExpenses()">
+      </div>
+    </div>
+    <div class="card-body pb-0">
+      <div class="d-flex justify-content-between align-items-center p-2 rounded mb-3" style="background:var(--primary-light)">
+        <span class="fw-700">إجمالي المصروفات</span>
+        <span class="fw-800 fs-5 text-primary" id="expTotal">—</span>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead><tr><th>الفئة</th><th>المبلغ</th><th>التاريخ</th><th>البيان</th><th></th></tr></thead>
+        <tbody id="expBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: إضافة مصروف -->
+<div class="modal fade" id="expenseModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title">إضافة مصروف</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3">
+          <div class="col-6">
+            <label class="form-label">الفئة <span class="text-danger">*</span></label>
+            <select class="form-select" id="eCategory">
+              <option value="">اختر...</option>
+              <option>إيجار</option>
+              <option>مرتبات</option>
+              <option>كهرباء وماء</option>
+              <option>مصاريف شحن</option>
+              <option>صيانة</option>
+              <option>تسويق وإعلان</option>
+              <option>مصاريف إدارية</option>
+              <option>أخرى</option>
+            </select>
+          </div>
+          <div class="col-6">
+            <label class="form-label">المبلغ <span class="text-danger">*</span></label>
+            <input type="number" class="form-control" id="eAmount" placeholder="0.00" step="0.01">
+          </div>
+          <div class="col-6">
+            <label class="form-label">التاريخ <span class="text-danger">*</span></label>
+            <input type="date" class="form-control" id="eDate">
+          </div>
+          <div class="col-12">
+            <label class="form-label">البيان</label>
+            <input type="text" class="form-control" id="eDesc" placeholder="وصف المصروف">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+        <button class="btn btn-primary" onclick="saveExpense()"><i class="bi bi-check2 me-1"></i>حفظ</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const expModal = new bootstrap.Modal(document.getElementById('expenseModal'));
+
+// Default dates
+const today    = new Date();
+const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+const todayStr = today.toISOString().split('T')[0];
+const firstStr = firstDay.toISOString().split('T')[0];
+
+['plFrom','expFrom'].forEach(id => document.getElementById(id).value = firstStr);
+['plTo',  'expTo'  ].forEach(id => document.getElementById(id).value = todayStr);
+
+// 90 days for products
+const d90 = new Date(Date.now()-90*24*60*60*1000).toISOString().split('T')[0];
+document.getElementById('prodFrom').value = d90;
+document.getElementById('prodTo').value   = todayStr;
+document.getElementById('eDate').value    = todayStr;
+
+function switchTab(name, el) {
+  document.querySelectorAll('.nav-tabs .nav-link').forEach(a=>a.classList.remove('active'));
+  el.classList.add('active');
+  ['pl','products','expenses'].forEach(t=>{
+    document.getElementById(`tab-${t}`).style.display = t===name?'':'none';
+  });
+  if (name==='pl')       loadPL();
+  if (name==='products') loadProducts();
+  if (name==='expenses') loadExpenses();
+  return false;
+}
+
+// ── P&L ──
+async function loadPL() {
+  const from = document.getElementById('plFrom').value;
+  const to   = document.getElementById('plTo').value;
+  document.getElementById('plBody').innerHTML =
+    '<div class="text-center py-4"><div class="spinner-border text-primary"></div></div>';
+
+  const r = await fetch(`/api/reports/profit-loss?from=${from}&to=${to}`);
+  const { data } = await r.json();
+  if (!data) return;
+
+  const d = data;
+  const profitColor = d.net_profit >= 0 ? 'var(--primary)' : 'var(--danger)';
+
+  document.getElementById('plBody').innerHTML = `
+    <!-- KPI Row -->
+    <div class="row g-3 mb-4">
+      <div class="col-6 col-md-3">
+        <div class="kpi-card d-flex align-items-center gap-3">
+          <div class="kpi-icon kpi-blue"><i class="bi bi-receipt"></i></div>
+          <div>
+            <div class="kpi-label">صافي المبيعات</div>
+            <div class="kpi-value">${fmt(d.revenue.net_sales)}</div>
+            <div class="small text-muted">${d.revenue.invoice_count} فاتورة</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="kpi-card d-flex align-items-center gap-3">
+          <div class="kpi-icon kpi-amber"><i class="bi bi-box-seam"></i></div>
+          <div>
+            <div class="kpi-label">تكلفة البضاعة</div>
+            <div class="kpi-value">${fmt(d.cost.total_cogs)}</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="kpi-card d-flex align-items-center gap-3">
+          <div class="kpi-icon kpi-red"><i class="bi bi-wallet2"></i></div>
+          <div>
+            <div class="kpi-label">إجمالي المصروفات</div>
+            <div class="kpi-value">${fmt(d.expenses.total)}</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="kpi-card d-flex align-items-center gap-3">
+          <div class="kpi-icon" style="background:${d.net_profit>=0?'var(--primary-light)':'#fee2e2'};color:${profitColor}">
+            <i class="bi bi-graph-${d.net_profit>=0?'up':'down'}-arrow"></i>
+          </div>
+          <div>
+            <div class="kpi-label">صافي الربح</div>
+            <div class="kpi-value" style="color:${profitColor}">${fmt(d.net_profit)}</div>
+            <div class="small" style="color:${profitColor}">${d.net_margin}٪ هامش</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- P&L Statement -->
+    <div class="row g-4">
+      <div class="col-md-7">
+        <table class="table">
+          <tbody>
+            <tr class="table-light"><td colspan="2" class="fw-700">الإيرادات</td></tr>
+            <tr><td>إجمالي المبيعات</td>  <td class="text-end fw-700">${fmt(d.revenue.total_sales)}</td></tr>
+            <tr><td class="text-muted ps-4">خصومات ممنوحة</td><td class="text-end text-danger">(${fmt(d.revenue.total_discounts)})</td></tr>
+            <tr><td class="text-muted ps-4">مرتجعات</td>       <td class="text-end text-danger">(${fmt(d.revenue.total_returns)})</td></tr>
+            <tr class="fw-700" style="border-top:2px solid var(--border)"><td>صافي المبيعات</td><td class="text-end">${fmt(d.revenue.net_sales)}</td></tr>
+
+            <tr><td colspan="2" class="pt-3"></td></tr>
+            <tr class="table-light"><td colspan="2" class="fw-700">التكلفة</td></tr>
+            <tr><td>تكلفة البضاعة المباعة</td><td class="text-end text-danger">(${fmt(d.cost.total_cogs)})</td></tr>
+            <tr class="fw-700" style="border-top:2px solid var(--border);color:var(--primary-mid)">
+              <td>مجمل الربح (${d.gross_margin}٪)</td>
+              <td class="text-end">${fmt(d.gross_profit)}</td>
+            </tr>
+
+            <tr><td colspan="2" class="pt-3"></td></tr>
+            <tr class="table-light"><td colspan="2" class="fw-700">المصروفات</td></tr>
+            ${d.expenses.by_category.map(e=>`
+              <tr><td class="ps-4">${e.category}</td><td class="text-end text-danger">(${fmt(e.total)})</td></tr>
+            `).join('')}
+            <tr><td>إجمالي المصروفات</td><td class="text-end text-danger">(${fmt(d.expenses.total)})</td></tr>
+
+            <tr style="border-top:3px double var(--border)">
+              <td class="fw-800 py-3" style="font-size:1.05rem">صافي الربح / الخسارة</td>
+              <td class="text-end fw-800 py-3" style="font-size:1.05rem;color:${profitColor}">
+                ${d.net_profit>=0?'':'-'}${fmt(Math.abs(d.net_profit))}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="col-md-5">
+        <div class="card h-100" style="border:2px solid ${d.net_profit>=0?'var(--primary)':'var(--danger)'}">
+          <div class="card-body text-center d-flex flex-column justify-content-center py-4">
+            <div class="mb-2" style="font-size:2rem">${d.net_profit>=0?'📈':'📉'}</div>
+            <div class="fw-700 text-muted mb-1">صافي الربح</div>
+            <div style="font-size:2rem;font-weight:800;color:${profitColor}">${fmt(d.net_profit)}</div>
+            <div class="mt-2 text-muted">هامش الربح الصافي: <strong style="color:${profitColor}">${d.net_margin}٪</strong></div>
+            <hr>
+            <div class="small text-muted">
+              <div>هامش مجمل الربح: ${d.gross_margin}٪</div>
+              <div>الفترة: ${d.period.from} → ${d.period.to}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ── Products ──
+async function loadProducts() {
+  const from = document.getElementById('prodFrom').value;
+  const to   = document.getElementById('prodTo').value;
+
+  const r = await fetch(`/api/reports/products?from=${from}&to=${to}`);
+  const { data } = await r.json();
+  if (!data) return;
+
+  // Summary
+  document.getElementById('prodSummary').innerHTML = `
+    <div class="row g-3 mb-3">
+      <div class="col-4">
+        <div class="kpi-card text-center">
+          <div class="kpi-label">إجمالي الأصناف</div>
+          <div class="kpi-value">${data.summary.total_products}</div>
+        </div>
+      </div>
+      <div class="col-4">
+        <div class="kpi-card text-center">
+          <div class="kpi-label">أصناف نشطة</div>
+          <div class="kpi-value text-primary">${data.summary.active_products}</div>
+        </div>
+      </div>
+      <div class="col-4">
+        <div class="kpi-card text-center">
+          <div class="kpi-label">أصناف راكدة</div>
+          <div class="kpi-value text-warning">${data.summary.dormant_products}</div>
+        </div>
+      </div>
+    </div>`;
+
+  // Top sellers
+  const tb = document.getElementById('topSellersBody');
+  if (!data.top_sellers.length) {
+    tb.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">لا توجد مبيعات في هذه الفترة</td></tr>';
+  } else {
+    tb.innerHTML = data.top_sellers.map((p,i)=>`
+      <tr>
+        <td>
+          <span class="badge ${i===0?'bg-warning text-dark':i===1?'bg-secondary':i===2?'bg-dark':'badge-cash'} px-2">
+            ${i+1}
+          </span>
+        </td>
+        <td><strong>${p.name}</strong></td>
+        <td class="fw-700 text-primary">${p.qty_sold}</td>
+        <td>${fmt(p.revenue)}</td>
+        <td>${p.times_sold} مرة</td>
+        <td>
+          <span class="badge ${p.stock<=0?'bg-danger':p.stock<=5?'bg-warning text-dark':'badge-paid'} px-2">
+            ${p.stock}
+          </span>
+        </td>
+      </tr>`).join('');
+  }
+
+  // Dormant
+  const db = document.getElementById('dormantBody');
+  if (!data.dormant.length) {
+    db.innerHTML = '<tr><td colspan="5" class="text-center text-success py-3">✓ لا توجد أصناف راكدة</td></tr>';
+  } else {
+    db.innerHTML = data.dormant.map(p=>`
+      <tr class="${p.stock>0?'table-warning':''}">
+        <td><strong>${p.name}</strong></td>
+        <td class="text-muted small">${p.barcode||'—'}</td>
+        <td>${fmt(p.sell_price)}</td>
+        <td>
+          <span class="badge ${p.stock<=0?'bg-danger':'bg-warning text-dark'} px-2">${p.stock}</span>
+        </td>
+        <td>${fmt(p.stock * p.sell_price)}</td>
+      </tr>`).join('');
+  }
+}
+
+// ── Expenses ──
+async function loadExpenses() {
+  const from = document.getElementById('expFrom').value;
+  const to   = document.getElementById('expTo').value;
+  const r = await fetch(`/api/reports/expenses?from=${from}&to=${to}`);
+  const { data, total } = await r.json();
+
+  document.getElementById('expTotal').textContent = fmt(total);
+
+  const tb = document.getElementById('expBody');
+  if (!data.length) {
+    tb.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">لا توجد مصروفات</td></tr>';
+    return;
+  }
+  tb.innerHTML = data.map(e=>`
+    <tr>
+      <td><span class="badge badge-pending px-2">${e.category}</span></td>
+      <td class="fw-700 text-danger">${fmt(e.amount)}</td>
+      <td class="text-muted">${fmtDate(e.expense_date)}</td>
+      <td class="text-muted small">${e.description||'—'}</td>
+      <td>
+        <button class="btn btn-sm btn-outline-danger" onclick="delExpense(${e.id})">
+          <i class="bi bi-trash"></i>
+        </button>
+      </td>
+    </tr>`).join('');
+}
+
+function openExpenseModal() { expModal.show(); }
+
+async function saveExpense() {
+  const body = {
+    category:     document.getElementById('eCategory').value,
+    amount:       document.getElementById('eAmount').value,
+    expense_date: document.getElementById('eDate').value,
+    description:  document.getElementById('eDesc').value
+  };
+  if (!body.category||!body.amount||!body.expense_date)
+    return toast('يرجى ملء الحقول المطلوبة','error');
+
+  const r = await api('POST','/api/reports/expenses', body);
+  if (r.success) { toast(r.message); expModal.hide(); loadExpenses(); }
+  else toast(r.message,'error');
+}
+
+async function delExpense(id) {
+  if (!confirm('حذف هذا المصروف؟')) return;
+  const r = await api('DELETE',`/api/reports/expenses/${id}`);
+  if (r.success) { toast(r.message); loadExpenses(); }
+  else toast(r.message,'error');
+}
+
+// Init
+loadPL();
+</script>
+
+<%- include('partials/foot') %>

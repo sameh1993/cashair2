@@ -1,279 +1,421 @@
-<%- include('partials/head', { title: "إدارة المخازن والمناديب", extraHead: `
-  <style>
-    .warehouse-page .nav-pills .nav-link { border-radius: 8px; color: #334155; font-weight: 700; }
-    .warehouse-page .nav-pills .nav-link.active { background: var(--primary); }
-    .warehouse-page .mini-label { color: #64748b; font-size: 12px; }
-    .warehouse-page .metric-card { min-height: 92px; }
-    .warehouse-page .table-responsive { border-radius: 10px; border: 1px solid #e2e8f0; }
-    .warehouse-page .table { margin-bottom: 0; vertical-align: middle; }
-    .warehouse-page .table thead th { background: #f8fafc; color: #64748b; font-size: 12px; white-space: nowrap; }
-    .warehouse-page .item-row { border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; margin-bottom: 8px; background: #f8fafc; }
-    .warehouse-page .form-control, .warehouse-page .form-select { border-radius: 8px; font-size: 13px; }
-    .warehouse-page .btn { border-radius: 8px; }
-    .warehouse-page .report-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; }
-  </style>
-` }) %>
-<body>
-<div id="app" class="app-layout warehouse-page">
-  <%- include('partials/sidebar', { activePage: 'warehouses', logoSub: 'مخازن ومناديب' }) %>
+<%- include('partials/head', { title:'المخازن', page:'warehouses', user:user }) %>
 
-  <main class="main-content">
-    <%- include('partials/topbar', { content: `
-      <div class="topbar-title">إدارة المخازن والمناديب</div>
-      <button class="btn btn-outline" id="refreshButton" type="button">تحديث</button>
-    ` }) %>
-
-    <section class="page-body">
-      <div class="row g-3 mb-3" id="statsGrid"></div>
-
-      <div class="card mb-3">
-        <div class="card-body">
-          <ul class="nav nav-pills gap-2 flex-wrap" id="warehouseTabs">
-            <li class="nav-item"><button class="nav-link active" data-section="documents" type="button">أذونات التوريد والصرف</button></li>
-            <li class="nav-item"><button class="nav-link" data-section="transfers" type="button">تحويلات المخازن</button></li>
-            <li class="nav-item"><button class="nav-link" data-section="forecasts" type="button">فوركاست المناديب</button></li>
-            <li class="nav-item"><button class="nav-link" data-section="balances" type="button">رصيد المخزن</button></li>
-            <li class="nav-item"><button class="nav-link" data-section="reports" type="button">التقارير</button></li>
-            <li class="nav-item"><button class="nav-link" data-section="setup" type="button">الإعدادات الأساسية</button></li>
-          </ul>
-        </div>
-      </div>
-
-      <section class="warehouse-section" data-section="documents">
-        <div class="row g-3">
-          <div class="col-lg-5">
-            <div class="card">
-              <div class="card-header"><h5>إذن توريد / صرف</h5></div>
-              <div class="card-body">
-                <div class="row g-2">
-                  <div class="col-md-6">
-                    <label class="form-label">نوع الإذن</label>
-                    <select class="form-select" id="documentType"></select>
-                  </div>
-                  <div class="col-md-6">
-                    <label class="form-label">المخزن</label>
-                    <select class="form-select" id="documentWarehouse"></select>
-                  </div>
-                  <div class="col-md-6">
-                    <label class="form-label" id="documentPartnerLabel">الطرف</label>
-                    <select class="form-select" id="documentPartner"></select>
-                  </div>
-                  <div class="col-md-6">
-                    <label class="form-label">المبلغ المسدد</label>
-                    <input class="form-control" id="documentPaid" type="number" min="0" step="0.01">
-                  </div>
-                  <div class="col-12">
-                    <label class="form-label">ملاحظات</label>
-                    <textarea class="form-control" id="documentNotes" rows="2"></textarea>
-                  </div>
-                </div>
-
-                <div class="d-flex justify-content-between align-items-center mt-3 mb-2">
-                  <strong>الأصناف</strong>
-                  <button class="btn btn-sm btn-outline" id="documentAddItem" type="button">إضافة صنف</button>
-                </div>
-                <div id="documentItems"></div>
-                <div class="alert alert-danger d-none mt-2" id="documentError"></div>
-
-                <div class="report-box mt-3">
-                  <div class="d-flex justify-content-between"><span>إجمالي الإذن</span><strong id="documentTotal">0</strong></div>
-                  <div class="d-flex justify-content-between"><span>أثر المديونية</span><strong id="documentDebt">0</strong></div>
-                </div>
-
-                <button class="btn btn-primary w-100 mt-3" id="documentSaveButton" type="button">حفظ الإذن</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="col-lg-7">
-            <div class="card">
-              <div class="card-header"><h5>سجل الأذونات</h5></div>
-              <div class="card-body">
-                <div class="table-responsive">
-                  <table class="table table-hover text-center">
-                    <thead><tr><th>الرقم</th><th>النوع</th><th>المخزن</th><th>الطرف</th><th>الإجمالي</th><th>التاريخ</th></tr></thead>
-                    <tbody id="documentsBody"></tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="warehouse-section d-none" data-section="transfers">
-        <div class="row g-3">
-          <div class="col-lg-5">
-            <div class="card">
-              <div class="card-header"><h5>إذن تحويل من مخزن لمخزن</h5></div>
-              <div class="card-body">
-                <div class="row g-2">
-                  <div class="col-md-6">
-                    <label class="form-label">من مخزن</label>
-                    <select class="form-select" id="transferFrom"></select>
-                  </div>
-                  <div class="col-md-6">
-                    <label class="form-label">إلى مخزن</label>
-                    <select class="form-select" id="transferTo"></select>
-                  </div>
-                  <div class="col-12">
-                    <label class="form-label">ملاحظات</label>
-                    <textarea class="form-control" id="transferNotes" rows="2"></textarea>
-                  </div>
-                </div>
-                <div class="d-flex justify-content-between align-items-center mt-3 mb-2">
-                  <strong>أصناف التحويل</strong>
-                  <button class="btn btn-sm btn-outline" id="transferAddItem" type="button">إضافة صنف</button>
-                </div>
-                <div id="transferItems"></div>
-                <div class="alert alert-danger d-none mt-2" id="transferError"></div>
-                <button class="btn btn-primary w-100 mt-3" id="transferSaveButton" type="button">حفظ التحويل</button>
-              </div>
-            </div>
-          </div>
-          <div class="col-lg-7">
-            <div class="card">
-              <div class="card-header"><h5>سجل التحويلات</h5></div>
-              <div class="card-body">
-                <div class="table-responsive">
-                  <table class="table table-hover text-center">
-                    <thead><tr><th>الرقم</th><th>من</th><th>إلى</th><th>عدد الأصناف</th><th>إجمالي الكمية</th><th>التاريخ</th></tr></thead>
-                    <tbody id="transfersBody"></tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="warehouse-section d-none" data-section="forecasts">
-        <div class="row g-3">
-          <div class="col-lg-5">
-            <div class="card">
-              <div class="card-header"><h5>تسجيل فوركاست مندوب</h5></div>
-              <div class="card-body">
-                <label class="form-label">مخزن المندوب</label>
-                <select class="form-select mb-2" id="forecastWarehouse"></select>
-                <label class="form-label">الفترة</label>
-                <input class="form-control mb-2" id="forecastPeriod" placeholder="مثال: يونيو 2026">
-                <label class="form-label">ملاحظات</label>
-                <textarea class="form-control" id="forecastNotes" rows="2"></textarea>
-                <div class="d-flex justify-content-between align-items-center mt-3 mb-2">
-                  <strong>الأصناف المطلوبة</strong>
-                  <button class="btn btn-sm btn-outline" id="forecastAddItem" type="button">إضافة صنف</button>
-                </div>
-                <div id="forecastItems"></div>
-                <div class="alert alert-danger d-none mt-2" id="forecastError"></div>
-                <button class="btn btn-primary w-100 mt-3" id="forecastSaveButton" type="button">حفظ الفوركاست</button>
-              </div>
-            </div>
-          </div>
-          <div class="col-lg-7">
-            <div class="card">
-              <div class="card-header"><h5>سجل الفوركاست</h5></div>
-              <div class="card-body">
-                <div class="table-responsive">
-                  <table class="table table-hover text-center">
-                    <thead><tr><th>الرقم</th><th>المندوب</th><th>الفترة</th><th>الأصناف</th><th>الكمية</th><th>التاريخ</th></tr></thead>
-                    <tbody id="forecastsBody"></tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="warehouse-section d-none" data-section="balances">
-        <div class="card">
-          <div class="card-header"><h5>تقرير رصيد أي مخزن</h5></div>
-          <div class="card-body">
-            <div class="row g-2 mb-3">
-              <div class="col-md-4"><select class="form-select" id="balanceWarehouseFilter"></select></div>
-              <div class="col-md-8"><input class="form-control" id="balanceSearch" placeholder="بحث بالصنف أو الباركود"></div>
-            </div>
-            <div class="table-responsive">
-              <table class="table table-hover text-center">
-                <thead><tr><th>المخزن</th><th>الصنف</th><th>الباركود</th><th>الرصيد</th><th>الوحدة</th><th>القيمة</th></tr></thead>
-                <tbody id="balancesBody"></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="warehouse-section d-none" data-section="reports">
-        <div class="row g-3">
-          <div class="col-lg-6">
-            <div class="card">
-              <div class="card-header"><h5>تقرير فاقد البيع</h5></div>
-              <div class="card-body">
-                <div class="table-responsive">
-                  <table class="table table-hover text-center">
-                    <thead><tr><th>الصنف</th><th>الفوركاست</th><th>التوريد الفعلي</th><th>الفرق</th></tr></thead>
-                    <tbody id="lostSalesBody"></tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="col-lg-6">
-            <div class="card">
-              <div class="card-header"><h5>فوركاست المناديب</h5></div>
-              <div class="card-body">
-                <div class="table-responsive">
-                  <table class="table table-hover text-center">
-                    <thead><tr><th>كود المندوب</th><th>المندوب</th><th>الصنف</th><th>الكمية</th></tr></thead>
-                    <tbody id="forecastMatrixBody"></tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="warehouse-section d-none" data-section="setup">
-        <div class="row g-3">
-          <div class="col-lg-6">
-            <div class="card">
-              <div class="card-header"><h5>إضافة مخزن أو مندوب</h5></div>
-              <div class="card-body">
-                <div class="row g-2">
-                  <div class="col-md-6"><label class="form-label">اسم المخزن</label><input class="form-control" id="warehouseName"></div>
-                  <div class="col-md-6"><label class="form-label">الكود</label><input class="form-control" id="warehouseCode" dir="ltr"></div>
-                  <div class="col-md-6"><label class="form-label">النوع</label><select class="form-select" id="warehouseType"><option value="rep">مخزن مندوب</option><option value="main">مخزن رئيسي</option></select></div>
-                  <div class="col-md-6"><label class="form-label">كود المندوب</label><input class="form-control" id="warehouseRepCode" dir="ltr"></div>
-                  <div class="col-12"><label class="form-label">العنوان / المنطقة</label><input class="form-control" id="warehouseLocation"></div>
-                  <div class="col-12"><label class="form-label">ملاحظات</label><textarea class="form-control" id="warehouseNotes" rows="2"></textarea></div>
-                </div>
-                <button class="btn btn-primary w-100 mt-3" id="warehouseSaveButton" type="button">إضافة المخزن</button>
-              </div>
-            </div>
-          </div>
-          <div class="col-lg-6">
-            <div class="card">
-              <div class="card-header"><h5>إضافة مصنع / عميل</h5></div>
-              <div class="card-body">
-                <div class="row g-2">
-                  <div class="col-md-7"><label class="form-label">الاسم</label><input class="form-control" id="partnerName"></div>
-                  <div class="col-md-5"><label class="form-label">النوع</label><select class="form-select" id="partnerType"><option value="supplier">مصنع / مورد</option><option value="customer">عميل</option></select></div>
-                  <div class="col-md-6"><label class="form-label">الهاتف</label><input class="form-control" id="partnerPhone"></div>
-                  <div class="col-md-6"><label class="form-label">العنوان</label><input class="form-control" id="partnerAddress"></div>
-                </div>
-                <button class="btn btn-primary w-100 mt-3" id="partnerSaveButton" type="button">إضافة الطرف</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-    </section>
-  </main>
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <div>
+    <h5 class="mb-0 fw-800">المخازن</h5>
+    <small class="text-muted">عرض المخزن والأصناف وإدارة التصنيفات</small>
+  </div>
+  <% if (user && user.role === 'admin') { %>
+  <button class="btn btn-primary" onclick="openProductModal()">
+    <i class="bi bi-plus-lg me-1"></i> صنف جديد
+  </button>
+  <% } %>
 </div>
 
-<datalist id="productsList"></datalist>
-<script src="/js/app.js"></script>
-<script src="/js/warehouse-system.js"></script>
-</body>
-</html>
+<div class="row g-3" id="warehouseInfo">
+  <div class="col-12 text-center text-muted py-4">
+    <div class="spinner-border text-primary"></div>
+  </div>
+</div>
+
+<!-- التصنيفات -->
+<div class="card mt-4">
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <span><i class="bi bi-tags text-primary"></i> تصنيفات الأصناف</span>
+    <% if (user && user.role === 'admin') { %>
+    <button class="btn btn-sm btn-outline-primary" onclick="openCategoryModal()">
+      <i class="bi bi-plus-lg me-1"></i> إضافة تصنيف
+    </button>
+    <% } %>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>التصنيف</th>
+          <th>عدد الأصناف</th>
+          <th>إجمالي المخزون</th>
+          <th>قيمة المخزون</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="categoriesTable">
+        <tr><td colspan="6" class="text-center text-muted py-4">جارٍ التحميل...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="mt-4">
+  <h6 class="fw-800 mb-3"><i class="bi bi-box me-1"></i>المنتجات في المخزن</h6>
+  <div class="table-responsive">
+    <table class="table table-bordered table-hover align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>#</th>
+          <th>المنتج</th>
+          <th>الباركود</th>
+          <th>الفئة</th>
+          <th>الكمية</th>
+          <th>سعر البيع</th>
+          <% if (user && user.role === 'admin') { %><th>الإجراءات</th><% } %>
+        </tr>
+      </thead>
+      <tbody id="stockTable">
+        <tr><td colspan="<%= user && user.role === 'admin' ? 7 : 6 %>" class="text-center text-muted">جارٍ التحميل...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modal تصنيف جديد / تعديل -->
+<div class="modal fade" id="categoryModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:380px">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title" id="categoryModalTitle">تصنيف جديد</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="categoryId">
+        <label class="form-label">اسم التصنيف <span class="text-danger">*</span></label>
+        <input type="text" class="form-control" id="categoryName" maxlength="100" placeholder="مثال: مشروبات">
+        <div class="text-danger small mt-1 d-none" id="categoryError"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+        <button class="btn btn-primary" id="categorySaveBtn" onclick="saveCategory()">
+          <i class="bi bi-check2 me-1"></i>حفظ
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal صنف جديد -->
+<div class="modal fade" id="productModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title" id="productModalTitle">صنف جديد</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3">
+          <div class="col-md-8">
+            <label class="form-label">اسم الصنف <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="productName">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">الباركود</label>
+            <input type="text" class="form-control" id="productBarcode">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">الفئة</label>
+            <select class="form-select" id="productCategory">
+              <option value="عام">عام</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">سعر التكلفة</label>
+            <input type="number" class="form-control" id="productCost" step="0.01" min="0" placeholder="0.00">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">سعر البيع <span class="text-danger">*</span></label>
+            <input type="number" class="form-control" id="productPrice" step="0.01" min="0" placeholder="0.00">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">الكمية الحالية</label>
+            <input type="number" class="form-control" id="productQty" step="any" min="0" placeholder="0">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">الحد الأدنى للتنبيه</label>
+            <input type="number" class="form-control" id="productMinQty" step="any" min="0" placeholder="5">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">الوحدة</label>
+            <select class="form-select" id="productUnit">
+              <option value="قطعة">قطعة</option>
+              <option value="كيلو">كيلو</option>
+              <option value="لتر">لتر</option>
+              <option value="متر">متر</option>
+              <option value="علبة">علبة</option>
+              <option value="كرتون">كرتون</option>
+            </select>
+          </div>
+          <div class="col-12">
+            <label class="form-label">وصف</label>
+            <textarea class="form-control" id="productDesc" rows="2"></textarea>
+          </div>
+        </div>
+        <div class="text-danger small mt-2 d-none" id="productError"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+        <button class="btn btn-primary" id="productSaveBtn" onclick="saveProduct()">
+          <i class="bi bi-check2 me-1"></i>حفظ
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const canManageCategories = <%= user && user.role === 'admin' ? 'true' : 'false' %>;
+let categories = [];
+let editingCategoryId = null;
+let editingProductId = null;
+const categoryModal = new bootstrap.Modal(document.getElementById('categoryModal'));
+const productModal = new bootstrap.Modal(document.getElementById('productModal'));
+
+function esc(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+async function loadWarehouse() {
+  const r = await fetch('/api/warehouses');
+  const res = await r.json();
+  const warehouses = res.data || res.warehouses || [];
+  const wh = warehouses[0];
+
+  const info = document.getElementById('warehouseInfo');
+  if (!wh) {
+    info.innerHTML = '<div class="col-12"><div class="card"><div class="card-body text-center text-muted py-5"><i class="bi bi-building" style="font-size:3rem;opacity:.2"></i><div class="mt-2">لا يوجد مخزن</div></div></div></div>';
+    return;
+  }
+  info.innerHTML = `<div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-body">
+        <h6 class="fw-800 mb-0"><i class="bi bi-building text-primary me-1"></i>${esc(wh.name)}</h6>
+        ${wh.location ? `<div class="text-muted small mt-1"><i class="bi bi-geo-alt me-1"></i>${esc(wh.location)}</div>` : ''}
+        ${wh.is_primary ? '<span class="badge bg-info mt-2">المخزن الرئيسي</span>' : ''}
+      </div>
+    </div>
+  </div>`;
+}
+
+async function loadProducts() {
+  const pr = await fetch('/api/products');
+  const prRes = await pr.json();
+  const products = prRes.data || [];
+  const tbody = document.getElementById('stockTable');
+  if (!products.length) {
+    tbody.innerHTML = `<tr><td colspan="${canManageCategories ? 7 : 6}" class="text-center text-muted">لا توجد منتجات</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = products.map((p, i) => `<tr>
+    <td>${i + 1}</td>
+    <td>${esc(p.name)}</td>
+    <td class="ltr">${esc(p.barcode || '-')}</td>
+    <td>${p.category ? `<span class="badge badge-cash px-2">${esc(p.category)}</span>` : '-'}</td>
+    <td>${p.stock ?? 0}</td>
+    <td>${p.price ?? 0}</td>
+    ${canManageCategories ? `<td class="text-nowrap">
+      <button class="btn btn-sm btn-outline-primary" onclick="editProduct(${p.id})" title="تعديل الصنف"><i class="bi bi-pencil"></i></button>
+      <button class="btn btn-sm btn-outline-danger ms-1" onclick="deleteProduct(${p.id})" title="حذف الصنف"><i class="bi bi-trash"></i></button>
+    </td>` : ''}
+  </tr>`).join('');
+}
+
+async function loadCategories() {
+  const res = await fetch('/api/products/categories/details').then(r => r.json());
+  categories = res.data || [];
+
+  const categorySelect = document.getElementById('productCategory');
+  if (categorySelect) {
+    const selectedCategory = categorySelect.value;
+    const categoryNames = [...new Set(['عام', ...categories.map(c => c.name).filter(Boolean)])];
+    categorySelect.innerHTML = categoryNames.map(name =>
+      `<option value="${esc(name)}" ${name === selectedCategory ? 'selected' : ''}>${esc(name)}</option>`
+    ).join('');
+  }
+
+  const tbody = document.getElementById('categoriesTable');
+
+  if (!categories.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">لا توجد تصنيفات — اضغط «إضافة تصنيف» لإضافة أول تصنيف</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = categories.map((c, i) => `<tr>
+    <td class="text-muted">${i + 1}</td>
+    <td><span class="badge badge-cash px-2">${esc(c.name)}</span></td>
+    <td>${c.products_count}</td>
+    <td>${Number(c.total_stock || 0)}</td>
+    <td>${fmt(c.total_value || 0)}</td>
+    <td>
+      ${canManageCategories ? `
+      <button class="btn btn-sm btn-outline-primary" onclick="editCategory(${c.id})" title="تعديل">
+        <i class="bi bi-pencil"></i>
+      </button>
+      <button class="btn btn-sm btn-outline-danger ms-1" onclick="deleteCategory(${c.id})" title="حذف">
+        <i class="bi bi-trash"></i>
+      </button>` : '<span class="text-muted">—</span>'}
+    </td>
+  </tr>`).join('');
+}
+
+function openCategoryModal() {
+  editingCategoryId = null;
+  document.getElementById('categoryId').value = '';
+  document.getElementById('categoryName').value = '';
+  document.getElementById('categoryError').classList.add('d-none');
+  document.getElementById('categoryModalTitle').textContent = 'تصنيف جديد';
+  categoryModal.show();
+  setTimeout(() => document.getElementById('categoryName').focus(), 300);
+}
+
+function openProductModal() {
+  editingProductId = null;
+  ['productName', 'productBarcode', 'productCategory', 'productCost', 'productPrice', 'productQty', 'productMinQty', 'productDesc']
+    .forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('productModalTitle').textContent = 'صنف جديد';
+  document.getElementById('productUnit').value = 'قطعة';
+  document.getElementById('productError').classList.add('d-none');
+  productModal.show();
+  setTimeout(() => document.getElementById('productName').focus(), 300);
+}
+
+async function editProduct(id) {
+  const response = await fetch(`/api/products/${id}`);
+  const result = await response.json();
+  const product = result.data;
+  if (!result.success || !product) return toast(result.message || 'تعذر تحميل بيانات الصنف', 'error');
+
+  editingProductId = id;
+  document.getElementById('productModalTitle').textContent = 'تعديل الصنف';
+  document.getElementById('productName').value = product.name || '';
+  document.getElementById('productBarcode').value = product.barcode || '';
+  document.getElementById('productCategory').value = product.category || 'عام';
+  document.getElementById('productCost').value = product.cost_price || 0;
+  document.getElementById('productPrice').value = product.price || 0;
+  document.getElementById('productQty').value = product.stock || 0;
+  document.getElementById('productMinQty').value = product.min_quantity || 5;
+  document.getElementById('productUnit').value = product.unit || 'قطعة';
+  document.getElementById('productDesc').value = product.description || '';
+  document.getElementById('productError').classList.add('d-none');
+  productModal.show();
+}
+
+async function saveProduct() {
+  const errorEl = document.getElementById('productError');
+  const name = document.getElementById('productName').value.trim();
+  const price = parseFloat(document.getElementById('productPrice').value) || 0;
+
+  if (!name) {
+    errorEl.textContent = 'اسم الصنف مطلوب';
+    errorEl.classList.remove('d-none');
+    return;
+  }
+
+  if (!price) {
+    errorEl.textContent = 'سعر البيع مطلوب';
+    errorEl.classList.remove('d-none');
+    return;
+  }
+
+  const body = {
+    name,
+    barcode: document.getElementById('productBarcode').value.trim(),
+    category: document.getElementById('productCategory').value.trim() || 'عام',
+    price,
+    cost_price: parseFloat(document.getElementById('productCost').value) || 0,
+    quantity: parseFloat(document.getElementById('productQty').value) || 0,
+    min_quantity: parseFloat(document.getElementById('productMinQty').value) || 5,
+    unit: document.getElementById('productUnit').value,
+    description: document.getElementById('productDesc').value.trim()
+  };
+
+  const btn = document.getElementById('productSaveBtn');
+  btn.disabled = true;
+
+  const res = editingProductId
+    ? await api('PUT', `/api/products/${editingProductId}`, body)
+    : await api('POST', '/api/products', body);
+  btn.disabled = false;
+
+  if (!res || !res.success) {
+    errorEl.textContent = (res && res.message) || 'تعذر حفظ الصنف';
+    errorEl.classList.remove('d-none');
+    return;
+  }
+
+  productModal.hide();
+  toast(res.message);
+  await Promise.all([loadProducts(), loadCategories()]);
+}
+
+async function deleteProduct(id) {
+  if (!confirm('هل تريد حذف هذا الصنف؟')) return;
+  const result = await api('DELETE', `/api/products/${id}`);
+  if (!result || !result.success) return toast((result && result.message) || 'تعذر حذف الصنف', 'error');
+  toast(result.message);
+  await Promise.all([loadProducts(), loadCategories()]);
+}
+
+function editCategory(id) {
+  const category = categories.find(c => Number(c.id) === Number(id));
+  if (!category) return;
+
+  editingCategoryId = category.id;
+  document.getElementById('categoryId').value = category.id;
+  document.getElementById('categoryName').value = category.name;
+  document.getElementById('categoryError').classList.add('d-none');
+  document.getElementById('categoryModalTitle').textContent = 'تعديل التصنيف';
+  categoryModal.show();
+}
+
+async function saveCategory() {
+  const name = document.getElementById('categoryName').value.trim();
+  const errorEl = document.getElementById('categoryError');
+
+  if (!name) {
+    errorEl.textContent = 'اسم التصنيف مطلوب';
+    errorEl.classList.remove('d-none');
+    return;
+  }
+
+  const btn = document.getElementById('categorySaveBtn');
+  btn.disabled = true;
+
+  const res = editingCategoryId
+    ? await api('PUT', `/api/products/categories/${editingCategoryId}`, { name })
+    : await api('POST', '/api/products/categories', { name });
+
+  btn.disabled = false;
+
+  if (!res || !res.success) {
+    errorEl.textContent = (res && res.message) || 'تعذر حفظ التصنيف';
+    errorEl.classList.remove('d-none');
+    return;
+  }
+
+  categoryModal.hide();
+  toast(res.message);
+  await Promise.all([loadCategories(), loadProducts()]);
+}
+
+async function deleteCategory(id) {
+  const category = categories.find(c => Number(c.id) === Number(id));
+  if (!category) return;
+  if (!confirm(`حذف التصنيف "${category.name}"؟`)) return;
+
+  const res = await api('DELETE', `/api/products/categories/${id}`);
+  if (!res || !res.success) return toast((res && res.message) || 'تعذر حذف التصنيف', 'error');
+
+  toast(res.message);
+  await loadCategories();
+}
+
+loadWarehouse();
+loadCategories();
+loadProducts();
+</script>
+
+<%- include('partials/foot') %>

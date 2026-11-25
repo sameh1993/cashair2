@@ -1,91 +1,204 @@
-<%- include('partials/head', { title: "تسجيل الدخول | نظام الكاشير", useVue: false, extraHead: "" }) %>
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>تسجيل الدخول</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.rtl.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #1a6b3c;
+      --primary-light: #e8f5ee;
+      --primary-mid: #2d9657;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Cairo', sans-serif;
+      background: linear-gradient(135deg, #0f3d24 0%, #1a6b3c 60%, #2d9657 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .login-card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 40px 36px;
+      width: 100%;
+      max-width: 400px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.25);
+    }
+    .brand-logo {
+      width: 64px; height: 64px;
+      background: var(--primary-light);
+      border-radius: 16px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 2rem;
+      margin: 0 auto 16px;
+    }
+    .brand-name {
+      font-size: 1.3rem;
+      font-weight: 800;
+      color: var(--primary);
+      text-align: center;
+      margin-bottom: 4px;
+    }
+    .brand-sub {
+      font-size: .8rem;
+      color: #6b7280;
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .form-control {
+      border-radius: 8px;
+      font-family: 'Cairo', sans-serif;
+      font-size: .9rem;
+      padding: 10px 14px;
+    }
+    .form-control:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(26,107,60,.12);
+    }
+    .form-label { font-weight: 600; font-size: .85rem; }
+    .btn-login {
+      background: var(--primary);
+      border: none;
+      color: #fff;
+      font-family: 'Cairo', sans-serif;
+      font-weight: 700;
+      font-size: .95rem;
+      padding: 11px;
+      border-radius: 8px;
+      width: 100%;
+      transition: background .2s;
+    }
+    .btn-login:hover { background: #155a32; }
+    .btn-login:disabled { opacity: .7; }
+    .error-msg {
+      background: #fee2e2;
+      color: #dc2626;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: .85rem;
+      font-weight: 600;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .input-icon { position: relative; }
+    .input-icon .bi {
+      position: absolute;
+      top: 50%; transform: translateY(-50%);
+      right: 12px;
+      color: #9ca3af;
+      font-size: 1rem;
+      pointer-events: none;
+    }
+    .input-icon input { padding-right: 36px; }
+    .pass-toggle {
+      position: absolute;
+      top: 50%; transform: translateY(-50%);
+      left: 12px;
+      color: #9ca3af;
+      cursor: pointer;
+      font-size: 1rem;
+      background: none; border: none; padding: 0;
+    }
+    .footer-note {
+      text-align: center;
+      margin-top: 20px;
+      font-size: .75rem;
+      color: #9ca3af;
+    }
+  </style>
+</head>
 <body>
-<div class="login-page">
-    <div class="login-card" id="app">
-      <div class="login-logo">
-        <div class="icon">🛒</div>
-        <h1>نظام الكاشير</h1>
-        <p>سجل دخولك للمتابعة</p>
-      </div>
+<div class="login-card">
+  <div class="brand-logo">🏪</div>
+  <div class="brand-name" id="shopName">نظام الكاشير</div>
+  <div class="brand-sub">نظام إدارة المبيعات</div>
 
-      <form id="loginForm">
-        <div class="form-group">
-          <label class="form-label">اسم المستخدم</label>
-          <input type="text" id="username" class="form-control" placeholder="admin" autocomplete="username" required
-            autofocus>
-        </div>
-        <div class="form-group" style="margin-bottom:20px">
-          <label class="form-label">كلمة المرور</label>
-          <div style="position:relative">
-            <input type="password" id="password" class="form-control" placeholder="••••••••"
-              autocomplete="current-password" required>
-            <button type="button" id="togglePwd"
-              style="position:absolute;left:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:16px;color:#94a3b8;">👁</button>
-          </div>
-        </div>
+  <div class="error-msg" id="errorMsg"></div>
 
-        <div id="errorMsg"
-          style="background:#fee2e2;color:#b91c1c;border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:14px;display:none;">
-        </div>
-
-        <button type="submit" class="btn btn-primary btn-block btn-lg" id="loginBtn">
-          <span id="loginText">دخول</span>
-          <span id="loginSpinner" class="spinner" style="display:none;width:16px;height:16px;border-width:2px;"></span>
-        </button>
-      </form>
-
-      <p style="text-align:center;margin-top:20px;color:#94a3b8;font-size:12px;">
-        المستخدم الافتراضي: <strong>admin</strong> / كلمة المرور: <strong>1234</strong>
-      </p>
+  <div class="mb-3">
+    <label class="form-label">اسم المستخدم</label>
+    <div class="input-icon">
+      <i class="bi bi-person"></i>
+      <input type="text" class="form-control" id="username" placeholder="admin" autocomplete="username">
+    </div>
+  </div>
+  <div class="mb-4">
+    <label class="form-label">كلمة المرور</label>
+    <div class="input-icon">
+      <i class="bi bi-lock"></i>
+      <input type="password" class="form-control" id="password" placeholder="••••••••" autocomplete="current-password">
+      <button class="pass-toggle" type="button" onclick="togglePass()">
+        <i class="bi bi-eye" id="passIcon"></i>
+      </button>
     </div>
   </div>
 
-  <script>
-    document.getElementById('togglePwd').onclick = function () {
-      const p = document.getElementById('password');
-      p.type = p.type === 'password' ? 'text' : 'password';
-    };
+  <button class="btn-login" id="loginBtn" onclick="doLogin()">
+    <i class="bi bi-box-arrow-in-right me-2"></i>دخول
+  </button>
 
-    document.getElementById('loginForm').onsubmit = async function (e) {
-      e.preventDefault();
-      const btn = document.getElementById('loginBtn');
-      const text = document.getElementById('loginText');
-      const spinner = document.getElementById('loginSpinner');
-      const errDiv = document.getElementById('errorMsg');
+  <div class="footer-note">نظام إدارة نقاط البيع</div>
+</div>
 
-      btn.disabled = true;
-      text.style.display = 'none';
-      spinner.style.display = '';
-      errDiv.style.display = 'none';
+<script>
+// Load shop name
+fetch('/api/settings/shop').then(r=>r.json()).then(({data})=>{
+  if (data?.shop_name) document.getElementById('shopName').textContent = data.shop_name;
+}).catch(()=>{});
 
-      try {
-        const res = await fetch('/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            username: document.getElementById('username').value.trim(),
-            password: document.getElementById('password').value
-          })
-        });
-        const data = await res.json();
-        if (data.success) {
-          window.location.href = '/pos';
-        } else {
-          errDiv.textContent = data.message || 'بيانات غير صحيحة';
-          errDiv.style.display = 'block';
-          btn.disabled = false;
-          text.style.display = '';
-          spinner.style.display = 'none';
-          console.log(data)
-        }
-      } catch {
-        errDiv.textContent = 'خطأ في الاتصال';
-        errDiv.style.display = 'block';
-        btn.disabled = false;
-        text.style.display = '';
-        spinner.style.display = 'none';
-      }
-    };
-  </script>
+function togglePass() {
+  const inp  = document.getElementById('password');
+  const icon = document.getElementById('passIcon');
+  if (inp.type==='password') { inp.type='text'; icon.className='bi bi-eye-slash'; }
+  else { inp.type='password'; icon.className='bi bi-eye'; }
+}
+
+document.addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+
+async function doLogin() {
+  const username = document.getElementById('username').value.trim();
+  const password = document.getElementById('password').value;
+  const errEl    = document.getElementById('errorMsg');
+  const btn      = document.getElementById('loginBtn');
+
+  if (!username || !password) {
+    errEl.textContent = 'يرجى إدخال اسم المستخدم وكلمة المرور';
+    errEl.style.display = '';
+    return;
+  }
+  errEl.style.display = 'none';
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>جاري الدخول...';
+
+  try {
+    const r = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    const res = await r.json();
+    if (res.success) {
+      window.location.href = '/pos';
+    } else {
+      errEl.textContent = res.message || 'اسم المستخدم أو كلمة المرور غلط';
+      errEl.style.display = '';
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-box-arrow-in-right me-2"></i>دخول';
+    }
+  } catch {
+    errEl.textContent = 'خطأ في الاتصال بالخادم';
+    errEl.style.display = '';
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-box-arrow-in-right me-2"></i>دخول';
+  }
+}
+</script>
 </body>
 </html>

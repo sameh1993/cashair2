@@ -1,161 +1,68 @@
-<%- include('partials/head', { title: "قرب النفاد | نظام الكاشير", useVue: true, extraHead: "" }) %>
-<body>
-<div id="app" class="app-layout" v-cloak>
-  <%- include('partials/sidebar', { activePage: 'low-stock', logoSub: 'الأصناف قرب النفاد' }) %>
-<div class="main-content">
-    <%- include('partials/topbar', { content: `
-      <div class="topbar-title">🚨 الأصناف قرب النفاد</div>
-      <input type="text" class="form-control" style="width:240px;" placeholder="🔍 بحث باسم الصنف أو الباركود" v-model="search">
-      <button class="btn btn-outline" @click="loadLowStock">تحديث</button>
-    ` }) %>
-    <div class="page-body">
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:18px;">
-        <div class="stat-card">
-          <div class="stat-value" style="color:var(--danger);">{{ outCount }}</div>
-          <div class="stat-label">أصناف نفدت</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value" style="color:var(--warning);">{{ lowCount }}</div>
-          <div class="stat-label">قرب النفاد</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value" style="color:var(--primary);">{{ alertLimit }}</div>
-          <div class="stat-label">حد التنبيه الحالي</div>
-        </div>
-      </div>
+<%- include('partials/head', { title:'تحذيرات المخزون', page:'lowstock', user:user }) %>
 
-      <div class="card">
-        <div class="card-header">
-          <h5>قائمة النواقص ({{ filteredProducts.length }})</h5>
-          <div class="text-muted" style="font-size:12px;">
-            تظهر الأصناف التي رصيدها أقل من أو يساوي حد التنبيه
-          </div>
-        </div>
-        <div class="table-wrapper">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>اسم الصنف</th>
-                <th>الباركود</th>
-                <th>الرصيد الحالي</th>
-                <th>الوحدة</th>
-                <th>السعر</th>
-                <th>الحالة</th>
-                <th>إجراء</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-if="loading">
-                <td colspan="8" class="text-center" style="padding:40px;">
-                  <span class="spinner" style="width:24px;height:24px;border-color:#e2e8f0;border-top-color:var(--primary);"></span>
-                </td>
-              </tr>
-              <tr v-else-if="!filteredProducts.length">
-                <td colspan="8" class="text-center" style="padding:40px;color:#94a3b8;">
-                  لا توجد أصناف قرب النفاد الآن
-                </td>
-              </tr>
-              <tr v-for="p in filteredProducts" :key="p.id">
-                <td class="text-muted" style="font-size:12px;">{{ p.id }}</td>
-                <td class="fw-bold">{{ p.name }}</td>
-                <td style="font-size:12px;direction:ltr;text-align:right;color:#64748b;">{{ p.barcode || '-' }}</td>
-                <td>
-                  <span :class="p.stock <= 0 ? 'badge badge-danger' : 'badge badge-warning'">
-                    {{ p.stock }}
-                  </span>
-                </td>
-                <td class="text-muted">{{ p.unit || 'قطعة' }}</td>
-                <td class="fw-bold" style="color:var(--primary);">{{ formatMoney(p.price) }}</td>
-                <td>
-                  <span :class="p.stock <= 0 ? 'badge badge-danger' : 'badge badge-warning'">
-                    {{ p.stock <= 0 ? 'نفد' : 'قرب النفاد' }}
-                  </span>
-                </td>
-                <td>
-                  <a class="btn btn-sm btn-outline" href="/warehouses">إضافة أو صرف</a>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div id="toast-container"></div>
+<div class="mb-4">
+  <h5 class="mb-0 fw-800">تحذيرات المخزون</h5>
+  <small class="text-muted">الأصناف التي وصلت للحد الأدنى أو نفذت</small>
 </div>
 
-<script src="/js/app.js"></script>
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="kpi-card d-flex align-items-center gap-3">
+      <div class="kpi-icon kpi-red"><i class="bi bi-x-circle"></i></div>
+      <div><div class="kpi-label">نفذ تماماً</div><div class="kpi-value" id="kpiZero">—</div></div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="kpi-card d-flex align-items-center gap-3">
+      <div class="kpi-icon kpi-amber"><i class="bi bi-exclamation-triangle"></i></div>
+      <div><div class="kpi-label">تحت الحد الأدنى</div><div class="kpi-value" id="kpiLow">—</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><i class="bi bi-exclamation-triangle text-warning"></i> الأصناف التي تحتاج تعبئة</div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr><th>الصنف</th><th>الفئة</th><th>الكمية الحالية</th><th>الحد الأدنى</th><th>الحالة</th></tr>
+      </thead>
+      <tbody id="tableBody">
+        <tr><td colspan="5" class="text-center text-muted py-4">جاري التحميل...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
 <script>
-const { createApp, ref, computed, onMounted } = Vue;
+async function load() {
+  const r = await fetch('/api/products?low_stock=1');
+  const res = await r.json();
+  const data = (res.data||res.products||[]).filter(p=>p.stock<=(p.min_quantity||5));
 
-createApp({
-  setup() {
-    const lowStockProducts = ref([]);
-    const loading = ref(true);
-    const search = ref('');
-    const currency = ref('ج.م');
-    const curPos = ref('after');
-    const alertLimit = ref(5);
+  const zero = data.filter(p=>p.stock<=0).length;
+  const low  = data.filter(p=>p.stock>0 && p.stock<=(p.min_quantity||5)).length;
+  document.getElementById('kpiZero').textContent = zero;
+  document.getElementById('kpiLow').textContent  = low;
 
-    const filteredProducts = computed(() => {
-      const q = search.value.trim().toLowerCase();
-      if (!q) return lowStockProducts.value;
-      return lowStockProducts.value.filter(p =>
-        p.name.toLowerCase().includes(q) || (p.barcode && p.barcode.includes(q))
-      );
-    });
-
-    const outCount = computed(() => lowStockProducts.value.filter(p => Number(p.stock) <= 0).length);
-    const lowCount = computed(() => lowStockProducts.value.filter(p => Number(p.stock) > 0).length);
-
-    function formatMoney(v) {
-      const val = parseFloat(v || 0).toFixed(2);
-      return curPos.value === 'before' ? `${currency.value} ${val}` : `${val} ${currency.value}`;
-    }
-
-    async function loadLowStock() {
-      loading.value = true;
-      try {
-        const [settingsRes, productsRes] = await Promise.all([
-          fetch('/api/settings'),
-          fetch('/api/products/low-stock')
-        ]);
-        const settingsData = await settingsRes.json();
-        const productsData = await productsRes.json();
-
-        if (settingsData.success) {
-          currency.value = settingsData.data.currency || 'ج.م';
-          curPos.value = settingsData.data.currency_position || 'after';
-        }
-
-        if (productsData.success) {
-          lowStockProducts.value = productsData.data;
-          alertLimit.value = productsData.meta?.low_stock_alert || 5;
-        } else {
-          showToast(productsData.message || 'تعذر تحميل البيانات', 'error');
-        }
-      } catch {
-        showToast('خطأ في الاتصال بالخادم', 'error');
-      } finally {
-        loading.value = false;
-      }
-    }
-
-    function doLogout() {
-      if (confirm('تسجيل الخروج؟')) logout();
-    }
-
-    onMounted(loadLowStock);
-
-    return {
-      lowStockProducts, loading, search, alertLimit,
-      filteredProducts, outCount, lowCount,
-      formatMoney, loadLowStock, doLogout,
-    };
+  const tb = document.getElementById('tableBody');
+  if (!data.length) {
+    tb.innerHTML = '<tr><td colspan="5" class="text-center text-success py-4">✓ المخزون بحالة جيدة</td></tr>';
+    return;
   }
-}).mount('#app');
+  const sorted = data.sort((a,b)=>a.stock-b.stock);
+  tb.innerHTML = sorted.map(p=>`
+    <tr class="${p.stock<=0?'table-danger':'table-warning'}">
+      <td><strong>${p.name}</strong></td>
+      <td>${p.category?`<span class="badge badge-cash px-2">${p.category}</span>`:'—'}</td>
+      <td class="fw-800 ${p.stock<=0?'text-danger':'text-warning'}">${p.stock} ${p.unit||'قطعة'}</td>
+      <td class="text-muted">${p.min_quantity||5}</td>
+      <td>${p.stock<=0
+        ?'<span class="badge bg-danger px-2">نفذ تماماً</span>'
+        :'<span class="badge bg-warning text-dark px-2">تحت الحد الأدنى</span>'}</td>
+    </tr>`).join('');
+}
+load();
 </script>
-</body>
-</html>
+
+<%- include('partials/foot') %>

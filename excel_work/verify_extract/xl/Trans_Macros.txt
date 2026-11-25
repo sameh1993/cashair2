@@ -1,18 +1,0 @@
-xMEL&L%*1( BXBx@<	"b("	"	px]0]p "B17(!.'B47((.Set Load Trans to True !2'x .  
-G  70!. 70!.7((.jd Load Items ic7V B17(!.'"Only on Change of Transaction TypeE57(!RB@TB17(!.SalesMoveBtn17VB@X.
-Move RightdFMoveBtn17VB@X/	Move Left \ `^ db=fE57(!RB@ZkkA@8 rExistTransGrp7V(n pNewTransGrp7V(nB3,B47((.'Trans Load and New Transaction To Falseqo "E57(!.7Please select a Customer or Vendor for this TransactionA@:|xkp @D99997(%!2'  
- 70!.7(!.  70(.dF=H *I   70(.k  rExistTransGrp7V(n pNewTransGrp7V(nB37((.New Trans to Falseq(o  "B37((.Set Trans to New)B2,E5,E7,E9,E11,E13,H7,H9,H11:K11,J13:K137(B@FFClear Fields ZH57((.Set Current Date pExistTransGrp7V(n rNewTransGrp7V(n ThumbPic7VB@T#!Delete thumbnail picture (if any)qo "B27(!.G|j0Are you sure you want to delete this transaction <Delete Transaction$: G|jB27(!.' : 7(!jB@T87(B@HqoHD18 "%(B@Ho \ `^ db=fE57(!RB@ZHm `Attribute VB_Name = "Trans_Macros"
-Option Explicit
-  Dim Row,Col As LongBSub,_Load()$fPrevTy4peRSVWith Sheet1&"= .Range("B1").Valu4True  'Setady to3(ActiveCell.NFor_= 4 To$ 1CIf<> 10 ThenI.!s(16~5'V ItemsENext9
-@@H'Only ICh o[a't
-
-E5ida.DeletAU Sales")
-.Shapes("MoveBtniIncrementLef@t 30 ' pRigh#A`dd xl@z'eList, AlertStyle:=op, OperatorBetween, tmula1:="=Else:0-14T000nd If
-E5Prod'eExOGrpA}isiblmsoCAINew9uFa&aq3,fBo '#ZaO`
-YQo 	 a~
-A @c_SavejT.~= EmptySMsgBox "Please s\ct a Customer `~Vendf`thisI-xit BaA."a{d!D9+@@(xlUp) +  5	 9^$
-	^ "=H" &!& "*I)N N NViT{E3X 0 'L$5KbK!iR7!$6b2,E5,E7,E9,E11`3,H7,H9, H11:K J13ACRrCoDnts ' Field@
-fH\DabCurr@ !e~#B?B6BK0O rr2Resu ThumbPicSe 'ttnail picture (if xany10FGox0@ B`R'2#B@GE>C("A	y0ou sA
-waTntadr CtQM", vbYesNo, "R)*vbN!0E6
-@(8:8).Enptire|%,D180SO@ wCancel!c|
-

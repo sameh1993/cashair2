@@ -1,0 +1,83 @@
+</main><!-- /#main -->
+
+<!-- PIN Modal (reused by return flows) -->
+<div class="modal fade" id="pinModal" tabindex="-1">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title"><i class="bi bi-lock me-1"></i>الرقم السري للمرتجع</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-2">يرجى إدخال الرقم السري للموافقة على عملية المرتجع</p>
+        <input type="password" class="form-control text-center" id="pinInput" placeholder="****" maxlength="10" style="font-size:1.5rem;letter-spacing:4px;direction:ltr;">
+        <div id="pinError" class="text-danger small mt-1 d-none"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+        <button class="btn btn-primary" id="pinConfirmBtn" onclick="resolvePin()">تأكيد</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Reusable PIN prompt — returns a promise<string|false>
+let _pinResolve = null;
+const pinModal = new bootstrap.Modal(document.getElementById('pinModal'));
+document.getElementById('pinInput').addEventListener('keydown', e => { if (e.key === 'Enter') resolvePin(); });
+document.getElementById('pinModal').addEventListener('hidden.bs.modal', () => { if (_pinResolve) { _pinResolve(false); _pinResolve = null; } });
+async function promptPin() {
+  document.getElementById('pinInput').value = '';
+  document.getElementById('pinError').classList.add('d-none');
+  pinModal.show();
+  return new Promise(resolve => { _pinResolve = resolve; });
+}
+function resolvePin() {
+  const pin = document.getElementById('pinInput').value.trim();
+  if (!pin) { document.getElementById('pinError').textContent = 'أدخل الرقم السري'; document.getElementById('pinError').classList.remove('d-none'); return; }
+  pinModal.hide();
+  if (_pinResolve) { _pinResolve(pin); _pinResolve = null; }
+}
+</script>
+
+<script>
+// ── Toast helper
+function toast(msg, type='success') {
+  const el = document.createElement('div');
+  el.className = `toast-msg toast-${type}`;
+  el.textContent = msg;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+// ── Sidebar toggle (mobile)
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+}
+
+// ── Load shop name into sidebar
+(async () => {
+  try {
+    const r = await fetch('/api/settings/shop', { credentials:'same-origin' });
+    const { data } = await r.json();
+    if (data?.shop_name) {
+      document.getElementById('sidebarShopName').textContent = data.shop_name;
+      document.title = data.shop_name;
+    }
+  } catch {}
+})();
+
+// ── POST / PUT / DELETE helper
+async function api(method, url, body) {
+  const r = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: body ? JSON.stringify(body) : undefined
+  });
+  return r.json();
+}
+</script>
+</body>
+</html>

@@ -1,297 +1,343 @@
-<%- include('partials/head', { title: "الإعدادات | نظام الكاشير", useVue: true, extraHead: "" }) %>
-<body>
-<div id="app" class="app-layout" v-cloak>
-  <%- include('partials/sidebar', { activePage: 'settings', logoSub: 'الإعدادات' }) %>
-<div class="main-content">
-    <%- include('partials/topbar', { content: `
-      <div class="topbar-title">⚙️ الإعدادات</div>
-    ` }) %>
-    <div class="page-body" style="max-width:700px;">
+<%- include('partials/head', { title:'الإعدادات', page:'settings', user:user }) %>
 
-      <!-- General Settings -->
-      <div class="card mb-4" v-if="isAdmin">
-        <div class="card-header"><h5>🏪 إعدادات المحل</h5></div>
-        <div class="card-body">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-            <div class="form-group" style="grid-column:1/-1;">
-              <label class="form-label">اسم المحل</label>
-              <input type="text" class="form-control" v-model="settings.shop_name" placeholder="مثال: سوبر ماركت النور">
-            </div>
-            <div class="form-group">
-              <label class="form-label">العملة</label>
-              <input type="text" class="form-control" v-model="settings.currency" placeholder="ج.م">
-            </div>
-            <div class="form-group">
-              <label class="form-label">موضع العملة</label>
-              <select class="form-control" v-model="settings.currency_position">
-                <option value="after">بعد الرقم (100 ج.م)</option>
-                <option value="before">قبل الرقم (ج.م 100)</option>
-              </select>
-            </div>
-            <div class="form-group" style="grid-column:1/-1;">
-              <label class="form-label">نص أسفل الفاتورة</label>
-              <input type="text" class="form-control" v-model="settings.receipt_footer" placeholder="شكراً لزيارتكم">
-            </div>
-          </div>
+<div class="mb-4">
+  <h5 class="mb-0 fw-800">الإعدادات</h5>
+  <small class="text-muted">إعدادات النظام والمحل والمستخدمين</small>
+</div>
 
-          <div style="border-top:1px solid #f1f5f9;padding-top:14px;margin-top:4px;">
-            <div class="form-label" style="margin-bottom:10px;">إعدادات المخزون</div>
-            <div style="display:flex;gap:16px;flex-wrap:wrap;">
-              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13.5px;">
-                <input type="checkbox" v-model="showStock" style="width:16px;height:16px;">
-                إظهار المخزون في الكاشير
-              </label>
-              <div style="display:flex;align-items:center;gap:8px;">
-                <label class="form-label" style="margin:0;white-space:nowrap;">تنبيه المخزون عند:</label>
-                <input type="number" class="form-control" v-model.number="settings.low_stock_alert" style="width:80px;direction:ltr;" min="0">
-              </div>
-            </div>
-          </div>
+<ul class="nav nav-tabs mb-4">
+  <li class="nav-item"><a class="nav-link active" href="#" onclick="switchTab('shop',this)"><i class="bi bi-shop me-1"></i>بيانات المحل</a></li>
+  <li class="nav-item"><a class="nav-link" href="#" onclick="switchTab('users',this)"><i class="bi bi-people me-1"></i>المستخدمون</a></li>
+  <li class="nav-item"><a class="nav-link" href="#" onclick="switchTab('password',this)"><i class="bi bi-lock me-1"></i>تغيير كلمة المرور</a></li>
+</ul>
 
-          <div style="border-top:1px solid #f1f5f9;padding-top:14px;margin-top:14px;">
-            <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;">
-              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13.5px;">
-                <input type="checkbox" v-model="taxEnabled" style="width:16px;height:16px;">
-                تفعيل ضريبة القيمة المضافة
-              </label>
-              <div v-if="taxEnabled" style="display:flex;align-items:center;gap:8px;">
-                <label class="form-label" style="margin:0;">نسبة الضريبة %:</label>
-                <input type="number" class="form-control" v-model.number="settings.tax_rate" style="width:80px;direction:ltr;" min="0" max="100">
-              </div>
-            </div>
-          </div>
-
-          <div style="margin-top:16px;">
-            <button class="btn btn-primary" @click="saveSettings" :disabled="savingSettings">
-              <span v-if="!savingSettings">💾 حفظ الإعدادات</span>
-              <span v-else class="spinner" style="width:14px;height:14px;border-width:2px;"></span>
-            </button>
-          </div>
+<!-- ══ Tab: Shop ══ -->
+<div id="tab-shop">
+  <div class="card" style="max-width:600px">
+    <div class="card-header"><i class="bi bi-shop text-primary"></i> بيانات المحل</div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-12">
+          <label class="form-label">اسم المحل <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" id="shopName" placeholder="اسم المحل">
         </div>
-      </div>
-
-      <!-- Change Password -->
-      <div class="card mb-4">
-        <div class="card-header"><h5>🔐 تغيير كلمة المرور</h5></div>
-        <div class="card-body">
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:end;">
-            <div class="form-group" style="margin:0;">
-              <label class="form-label">الحالية</label>
-              <input type="password" class="form-control" v-model="pwd.old" placeholder="••••">
-            </div>
-            <div class="form-group" style="margin:0;">
-              <label class="form-label">الجديدة</label>
-              <input type="password" class="form-control" v-model="pwd.new1" placeholder="••••">
-            </div>
-            <div class="form-group" style="margin:0;">
-              <label class="form-label">تأكيد الجديدة</label>
-              <input type="password" class="form-control" v-model="pwd.new2" placeholder="••••">
-            </div>
-          </div>
-          <div style="margin-top:12px;">
-            <button class="btn btn-warning" @click="changePassword" :disabled="savingPwd">
-              <span v-if="!savingPwd">🔑 تغيير كلمة المرور</span>
-              <span v-else class="spinner" style="width:14px;height:14px;border-width:2px;"></span>
-            </button>
-          </div>
+        <div class="col-12">
+          <label class="form-label">العنوان</label>
+          <input type="text" class="form-control" id="shopAddress" placeholder="العنوان بالتفصيل">
         </div>
-      </div>
-
-      <!-- Users Management -->
-      <div class="card" v-if="isAdmin">
-        <div class="card-header">
-          <h5>👥 إدارة المستخدمين</h5>
-          <button class="btn btn-primary btn-sm" @click="openAddUser">+ مستخدم جديد</button>
+        <div class="col-6">
+          <label class="form-label">تليفون 1</label>
+          <input type="tel" class="form-control" id="shopPhone" placeholder="01xxxxxxxxx">
         </div>
-        <div class="table-wrapper">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>اسم المستخدم</th>
-                <th>الاسم الكامل</th>
-                <th>الدور</th>
-                <th>تاريخ الإنشاء</th>
-                <th>حذف</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="u in users" :key="u.id">
-                <td class="fw-bold">{{ u.username }}</td>
-                <td>{{ u.full_name || '-' }}</td>
-                <td>
-                  <span :class="u.role === 'admin' ? 'badge badge-warning' : 'badge badge-info'">
-                    {{ u.role === 'admin' ? '👑 مدير' : '💁 كاشير' }}
-                  </span>
-                </td>
-                <td class="text-muted" style="font-size:12px;">{{ new Date(u.created_at).toLocaleDateString('ar-EG') }}</td>
-                <td>
-                  <button class="btn btn-sm btn-danger" @click="deleteUser(u)">🗑</button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        <div class="col-6">
+          <label class="form-label">تليفون 2</label>
+          <input type="tel" class="form-control" id="shopPhone2" placeholder="اختياري">
+        </div>
+        <div class="col-12">
+          <label class="form-label">الرقم الضريبي</label>
+          <input type="text" class="form-control" id="shopTax" placeholder="اختياري">
+        </div>
+        <div class="col-12">
+          <label class="form-label">نص الفاتورة (أسفل الإيصال)</label>
+          <textarea class="form-control" id="shopNote" rows="2" placeholder="شكراً لتعاملكم معنا"></textarea>
+        </div>
+        <div class="col-12">
+          <button class="btn btn-primary" onclick="saveShop()">
+            <i class="bi bi-check2 me-1"></i>حفظ بيانات المحل
+          </button>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Add User Modal -->
-  <div class="modal-overlay" v-if="isAdmin && showUserModal" @click.self="showUserModal=false">
-    <div class="modal-box">
+  <!-- Return settings -->
+  <div class="card mt-3" style="max-width:600px">
+    <div class="card-header"><i class="bi bi-arrow-return-right text-warning"></i> إعدادات المرتجعات</div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-12">
+          <label class="form-label">الرقم السري للمرتجع</label>
+          <input type="password" class="form-control" id="returnPin" placeholder="اتركه فارغاً لإلغاء الحماية" maxlength="10" style="direction:ltr;max-width:200px">
+          <small class="text-muted">إذا تم تعيينه، سيُطلب الرقم السري قبل تنفيذ أي عملية مرتجع</small>
+        </div>
+        <div class="col-12">
+          <button class="btn btn-primary" onclick="saveReturnPin()">
+            <i class="bi bi-check2 me-1"></i>حفظ
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Preview -->
+  <div class="card mt-3" style="max-width:320px">
+    <div class="card-header"><i class="bi bi-eye text-primary"></i> معاينة الإيصال</div>
+    <div class="card-body" id="receiptPreview" style="font-family:'Cairo',sans-serif;font-size:.85rem;text-align:center">
+    </div>
+  </div>
+</div>
+
+<!-- ══ Tab: Users ══ -->
+<div id="tab-users" style="display:none">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div></div>
+    <button class="btn btn-primary btn-sm" onclick="openUserModal()">
+      <i class="bi bi-person-plus me-1"></i>مستخدم جديد
+    </button>
+  </div>
+  <div class="card" style="max-width:700px">
+    <div class="card-header"><i class="bi bi-people text-primary"></i> المستخدمون</div>
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead><tr><th>#</th><th>الاسم</th><th>اسم المستخدم</th><th>الصلاحية</th><th></th></tr></thead>
+        <tbody id="usersBody"><tr><td colspan="5" class="text-center text-muted py-3">جاري التحميل...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Tab: Password ══ -->
+<div id="tab-password" style="display:none">
+  <div class="card" style="max-width:400px">
+    <div class="card-header"><i class="bi bi-lock text-primary"></i> تغيير كلمة المرور</div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-12">
+          <label class="form-label">كلمة المرور الحالية</label>
+          <input type="password" class="form-control" id="pwdCurrent">
+        </div>
+        <div class="col-12">
+          <label class="form-label">كلمة المرور الجديدة</label>
+          <input type="password" class="form-control" id="pwdNew">
+        </div>
+        <div class="col-12">
+          <label class="form-label">تأكيد كلمة المرور</label>
+          <input type="password" class="form-control" id="pwdConfirm">
+        </div>
+        <div class="col-12">
+          <button class="btn btn-primary" onclick="changePassword()">
+            <i class="bi bi-check2 me-1"></i>تغيير كلمة المرور
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: مستخدم جديد/تعديل -->
+<div class="modal fade" id="userModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:400px">
+    <div class="modal-content">
       <div class="modal-header">
-        <h5>👤 إضافة مستخدم</h5>
-        <button class="btn-close" @click="showUserModal=false">✕</button>
+        <h6 class="modal-title" id="userModalTitle">مستخدم جديد</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <div class="form-group">
-          <label class="form-label">اسم المستخدم *</label>
-          <input type="text" class="form-control" v-model="newUser.username" placeholder="username" style="direction:ltr;">
-        </div>
-        <div class="form-group">
-          <label class="form-label">الاسم الكامل</label>
-          <input type="text" class="form-control" v-model="newUser.full_name" placeholder="محمد أحمد">
-        </div>
-        <div class="form-group">
-          <label class="form-label">كلمة المرور *</label>
-          <input type="password" class="form-control" v-model="newUser.password" placeholder="••••">
-        </div>
-        <div class="form-group">
-          <label class="form-label">الدور</label>
-          <select class="form-control" v-model="newUser.role">
-            <option value="cashier">كاشير</option>
-            <option value="admin">مدير</option>
-          </select>
+        <input type="hidden" id="uEditId">
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="form-label">الاسم الكامل <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="uFullName">
+          </div>
+          <div class="col-12">
+            <label class="form-label">اسم المستخدم <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="uUsername">
+          </div>
+          <div class="col-12" id="pwdField">
+            <label class="form-label">كلمة المرور <span class="text-danger">*</span></label>
+            <input type="password" class="form-control" id="uPassword">
+          </div>
+          <div class="col-12">
+            <label class="form-label">الصلاحية</label>
+            <select class="form-select" id="uRole">
+              <option value="admin">مدير</option>
+              <option value="cashier">كاشير</option>
+            </select>
+          </div>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-outline" @click="showUserModal=false">إلغاء</button>
-        <button class="btn btn-primary" @click="addUser" :disabled="savingUser">
-          <span v-if="!savingUser">إضافة</span>
-          <span v-else class="spinner" style="width:14px;height:14px;border-width:2px;"></span>
-        </button>
+        <button class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+        <button class="btn btn-primary" onclick="saveUser()"><i class="bi bi-check2 me-1"></i>حفظ</button>
       </div>
     </div>
   </div>
-
-  <div id="toast-container"></div>
 </div>
 
-<script src="/js/app.js"></script>
 <script>
-const { createApp, ref, computed, onMounted } = Vue;
+const userModal = new bootstrap.Modal(document.getElementById('userModal'));
 
-createApp({
-  setup() {
-    const currentUser = ref(null);
-    const isAdmin = computed(() => currentUser.value?.role === 'admin');
+function switchTab(name, el) {
+  document.querySelectorAll('.nav-tabs .nav-link').forEach(a=>a.classList.remove('active'));
+  el.classList.add('active');
+  ['shop','users','password'].forEach(t=>{
+    document.getElementById(`tab-${t}`).style.display = t===name?'':'none';
+  });
+  if (name==='users') loadUsers();
+  return false;
+}
 
-    const settings = ref({
-      shop_name: '', currency: 'ج.م', currency_position: 'after',
-      receipt_footer: 'شكراً لزيارتكم', tax_enabled: '0', tax_rate: '14',
-      show_stock: '1', low_stock_alert: '5'
+// ── Shop ──
+async function loadShop() {
+  const r = await fetch('/api/settings/shop');
+  const { data } = await r.json();
+  if (!data) return;
+  document.getElementById('shopName').value    = data.shop_name||'';
+  document.getElementById('shopAddress').value = data.address||'';
+  document.getElementById('shopPhone').value   = data.phone||'';
+  document.getElementById('shopPhone2').value  = data.phone2||'';
+  document.getElementById('shopTax').value     = data.tax_number||'';
+  document.getElementById('shopNote').value    = data.invoice_note||'';
+  updatePreview(data);
+
+  // Load return PIN
+  const sr = await fetch('/api/settings');
+  const sd = await sr.json();
+  if (sd.success) document.getElementById('returnPin').value = sd.data.return_pin||'';
+}
+
+function updatePreview(data) {
+  document.getElementById('receiptPreview').innerHTML = `
+    <div style="font-weight:800;font-size:1rem">${data.shop_name||'اسم المحل'}</div>
+    ${data.address?`<div style="font-size:.75rem;color:#666">${data.address}</div>`:''}
+    ${data.phone?`<div style="font-size:.75rem;color:#666">📞 ${data.phone}</div>`:''}
+    ${data.tax_number?`<div style="font-size:.72rem;color:#888">ضريبي: ${data.tax_number}</div>`:''}
+    <hr style="border-top:1px dashed #ccc;margin:6px 0">
+    <div style="font-size:.75rem;color:#888">${data.invoice_note||'شكراً لتعاملكم معنا'}</div>`;
+}
+
+// Live preview
+['shopName','shopAddress','shopPhone','shopPhone2','shopTax','shopNote'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', ()=>{
+    updatePreview({
+      shop_name:    document.getElementById('shopName').value,
+      address:      document.getElementById('shopAddress').value,
+      phone:        document.getElementById('shopPhone').value,
+      tax_number:   document.getElementById('shopTax').value,
+      invoice_note: document.getElementById('shopNote').value
     });
-    const showStock   = computed({ get: () => settings.value.show_stock === '1', set: v => settings.value.show_stock = v ? '1' : '0' });
-    const taxEnabled  = computed({ get: () => settings.value.tax_enabled === '1', set: v => settings.value.tax_enabled = v ? '1' : '0' });
-    const savingSettings = ref(false);
+  });
+});
 
-    const pwd = ref({ old: '', new1: '', new2: '' });
-    const savingPwd = ref(false);
+async function saveShop() {
+  const body = {
+    shop_name:    document.getElementById('shopName').value.trim(),
+    address:      document.getElementById('shopAddress').value.trim(),
+    phone:        document.getElementById('shopPhone').value.trim(),
+    phone2:       document.getElementById('shopPhone2').value.trim(),
+    tax_number:   document.getElementById('shopTax').value.trim(),
+    invoice_note: document.getElementById('shopNote').value.trim()
+  };
+  if (!body.shop_name) return toast('اسم المحل مطلوب','error');
 
-    const users = ref([]);
-    const showUserModal = ref(false);
-    const newUser = ref({ username: '', password: '', full_name: '', role: 'cashier' });
-    const savingUser = ref(false);
+  const r = await api('PUT', '/api/settings/shop', body);
+  if (r.success) toast(r.message);
+  else toast(r.message,'error');
+}
 
-    async function loadSettings() {
-      const r = await fetch('/api/settings');
-      const d = await r.json();
-      if (d.success) settings.value = { ...settings.value, ...d.data };
-    }
+async function saveReturnPin() {
+  const pin = document.getElementById('returnPin').value.trim();
+  const r = await api('PUT', '/api/settings', { return_pin: pin });
+  if (r.success) toast(r.message);
+  else toast(r.message, 'error');
+}
 
-    async function loadCurrentUser() {
-      currentUser.value = await getCurrentUser();
-    }
+// ── Users ──
+async function loadUsers() {
+  const r = await fetch('/api/settings/users');
+  const res = await r.json();
+  const data = res.data || res.users || [];
 
-    async function saveSettings() {
-      if (!isAdmin.value) return;
-      savingSettings.value = true;
-      const r = await fetch('/api/settings', {
-        method: 'PUT', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify(settings.value)
-      });
-      const d = await r.json();
-      savingSettings.value = false;
-      showToast(d.message || (d.success ? 'تم الحفظ' : 'حدث خطأ'), d.success ? 'success' : 'error');
-    }
+  const roleLabels = { admin:'مدير', cashier:'كاشير' };
+  const roleColors = { admin:'badge-overdue', cashier:'badge-cash' };
 
-    async function changePassword() {
-      if (!pwd.value.old || !pwd.value.new1) { showToast('يرجى ملء جميع الحقول', 'warning'); return; }
-      if (pwd.value.new1 !== pwd.value.new2) { showToast('كلمتا المرور غير متطابقتين', 'error'); return; }
-      savingPwd.value = true;
-      const r = await fetch('/api/auth/change-password', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ old_password: pwd.value.old, new_password: pwd.value.new1 })
-      });
-      const d = await r.json();
-      savingPwd.value = false;
-      if (d.success) { showToast(d.message, 'success'); pwd.value = { old:'', new1:'', new2:'' }; }
-      else showToast(d.message, 'error');
-    }
-
-    async function loadUsers() {
-      if (!isAdmin.value) return;
-      const r = await fetch('/api/settings/users');
-      const d = await r.json();
-      if (d.success) users.value = d.data;
-    }
-
-    function openAddUser() {
-      if (!isAdmin.value) return;
-      newUser.value = { username:'', password:'', full_name:'', role:'cashier' };
-      showUserModal.value = true;
-    }
-
-    async function addUser() {
-      if (!isAdmin.value) return;
-      savingUser.value = true;
-      const r = await fetch('/api/settings/users', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify(newUser.value)
-      });
-      const d = await r.json();
-      savingUser.value = false;
-      if (d.success) { showToast(d.message, 'success'); showUserModal.value = false; await loadUsers(); }
-      else showToast(d.message, 'error');
-    }
-
-    async function deleteUser(u) {
-      if (!isAdmin.value) return;
-      if (!confirm(`حذف المستخدم "${u.username}"؟`)) return;
-      const r = await fetch(`/api/settings/users/${u.id}`, { method: 'DELETE' });
-      const d = await r.json();
-      if (d.success) { showToast(d.message, 'success'); await loadUsers(); }
-      else showToast(d.message, 'error');
-    }
-
-    function doLogout() { if (confirm('تسجيل الخروج؟')) logout(); }
-
-    onMounted(async () => {
-      await loadCurrentUser();
-      if (isAdmin.value) {
-        await Promise.all([loadSettings(), loadUsers()]);
-      }
-    });
-
-    return {
-      currentUser, isAdmin,
-      settings, showStock, taxEnabled, savingSettings,
-      pwd, savingPwd,
-      users, showUserModal, newUser, savingUser,
-      saveSettings, changePassword,
-      openAddUser, addUser, deleteUser, doLogout,
-    };
+  const tb = document.getElementById('usersBody');
+  if (!data.length) {
+    tb.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">لا يوجد مستخدمون</td></tr>';
+    return;
   }
-}).mount('#app');
+  tb.innerHTML = data.map(u=>`
+    <tr>
+      <td>${u.id}</td>
+      <td><strong>${u.full_name}</strong></td>
+      <td class="text-muted">${u.username}</td>
+      <td><span class="badge ${roleColors[u.role]||'badge-cash'} px-2">${roleLabels[u.role]||u.role}</span></td>
+      <td>
+        <button class="btn btn-sm btn-outline-primary" onclick="editUser(${u.id})">
+          <i class="bi bi-pencil"></i>
+        </button>
+        ${u.username!=='admin'?`
+        <button class="btn btn-sm btn-outline-danger ms-1" onclick="delUser(${u.id},'${u.full_name}')">
+          <i class="bi bi-trash"></i>
+        </button>`:''}
+      </td>
+    </tr>`).join('');
+}
+
+function openUserModal() {
+  document.getElementById('uEditId').value   = '';
+  document.getElementById('uFullName').value = '';
+  document.getElementById('uUsername').value = '';
+  document.getElementById('uPassword').value = '';
+  document.getElementById('uRole').value     = 'cashier';
+  document.getElementById('pwdField').style.display = '';
+  document.getElementById('userModalTitle').textContent = 'مستخدم جديد';
+  userModal.show();
+}
+
+async function editUser(id) {
+  const r = await fetch(`/api/settings/users/${id}`);
+  const res = await r.json();
+  const u = res.data || res.user || res;
+  document.getElementById('uEditId').value   = id;
+  document.getElementById('uFullName').value = u.full_name;
+  document.getElementById('uUsername').value = u.username;
+  document.getElementById('uPassword').value = '';
+  document.getElementById('uRole').value     = u.role;
+  document.getElementById('pwdField').style.display = '';
+  document.getElementById('userModalTitle').textContent = 'تعديل المستخدم';
+  userModal.show();
+}
+
+async function saveUser() {
+  const id   = document.getElementById('uEditId').value;
+  const body = {
+    full_name: document.getElementById('uFullName').value.trim(),
+    username:  document.getElementById('uUsername').value.trim(),
+    password:  document.getElementById('uPassword').value,
+    role:      document.getElementById('uRole').value
+  };
+  if (!body.full_name||!body.username) return toast('الاسم واسم المستخدم مطلوبان','error');
+  if (!id && !body.password) return toast('كلمة المرور مطلوبة','error');
+
+  const r = await api(id?'PUT':'POST', id?`/api/settings/users/${id}`:'/api/settings/users', body);
+  if (r.success) { toast(r.message); userModal.hide(); loadUsers(); }
+  else toast(r.message,'error');
+}
+
+async function delUser(id, name) {
+  if (!confirm(`حذف المستخدم "${name}"؟`)) return;
+  const r = await api('DELETE', `/api/settings/users/${id}`);
+  if (r.success) { toast(r.message); loadUsers(); }
+  else toast(r.message,'error');
+}
+
+// ── Password ──
+async function changePassword() {
+  const current = document.getElementById('pwdCurrent').value;
+  const newPwd  = document.getElementById('pwdNew').value;
+  const confirm = document.getElementById('pwdConfirm').value;
+  if (!current||!newPwd) return toast('يرجى ملء كل الحقول','error');
+  if (newPwd !== confirm) return toast('كلمة المرور الجديدة غير متطابقة','error');
+
+  const r = await api('POST', '/api/auth/change-password', { old_password: current, new_password: newPwd });
+  if (r.success) {
+    toast(r.message);
+    ['pwdCurrent','pwdNew','pwdConfirm'].forEach(id=>document.getElementById(id).value='');
+  } else toast(r.message,'error');
+}
+
+loadShop();
 </script>
-</body>
-</html>
+
+<%- include('partials/foot') %>

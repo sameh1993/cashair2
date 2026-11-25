@@ -1,194 +1,232 @@
-<%- include('partials/head', { title: "الفواتير | نظام الكاشير", useVue: true, extraHead: "<style>\n    .stat-card-action {\n      cursor: pointer;\n      transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;\n    }\n    .stat-card-action:hover {\n      transform: translateY(-2px);\n      box-shadow: 0 14px 28px rgba(15, 23, 42, .10);\n      border-color: #bfdbfe;\n    }\n    .stat-card-action.active {\n      border-color: var(--primary);\n      box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);\n    }\n    .quick-filter-bar {\n      display: flex;\n      align-items: center;\n      justify-content: space-between;\n      gap: 12px;\n      flex-wrap: wrap;\n      padding: 12px 14px;\n      margin-bottom: 14px;\n      border: 1px solid #dbeafe;\n      border-radius: 14px;\n      background: linear-gradient(135deg, #f8fbff 0%, #eef6ff 100%);\n    }\n    .quick-filter-title {\n      font-size: 14px;\n      font-weight: 700;\n      color: #1e3a8a;\n    }\n    .quick-filter-subtitle {\n      font-size: 12px;\n      color: #64748b;\n      margin-top: 4px;\n    }\n    .quick-filter-metrics {\n      display: flex;\n      gap: 8px;\n      flex-wrap: wrap;\n    }\n    .quick-filter-pill {\n      padding: 7px 12px;\n      border-radius: 999px;\n      background: #fff;\n      border: 1px solid #dbeafe;\n      font-size: 12.5px;\n      font-weight: 700;\n      color: #0f172a;\n    }\n  </style>" }) %>
-<body>
-<div id="app" class="app-layout" v-cloak>
-  <%- include('partials/sidebar', { activePage: 'invoices', logoSub: 'الفواتير' }) %>
-<div class="main-content">
-    <%- include('partials/topbar', { content: `
-      <div class="topbar-title">🧾 الفواتير</div>
-    ` }) %>
-    <div class="page-body">
+<%- include('partials/head', { title:'الفواتير', page:'invoices', user:user }) %>
 
-      <!-- Stats row -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:18px;">
-        <div
-          class="stat-card stat-card-action"
-          :class="{ active: activeQuickFilter === 'today-invoices' }"
-          role="button"
-          tabindex="0"
-          @click="applyTodayInvoicesFilter"
-          @keyup.enter="applyTodayInvoicesFilter"
-        >
-          <div class="stat-value" style="color:var(--primary);">{{ todayStats.invoices_count || 0 }}</div>
-          <div class="stat-label">{{ isCashier ? 'فواتيرك اليوم' : 'فواتير اليوم' }}</div>
-        </div>
-        <div
-          class="stat-card stat-card-action"
-          :class="{ active: activeQuickFilter === 'today-sales' }"
-          role="button"
-          tabindex="0"
-          @click="applyTodaySalesFilter"
-          @keyup.enter="applyTodaySalesFilter"
-        >
-          <div class="stat-value" style="color:var(--success);">{{ formatMoney(todayStats.total_sales || 0) }}</div>
-          <div class="stat-label">{{ isCashier ? 'إيرادك اليوم' : 'مبيعات اليوم' }}</div>
-        </div>
-        <div
-          class="stat-card stat-card-action"
-          :class="{ active: activeQuickFilter === 'all' }"
-          role="button"
-          tabindex="0"
-          @click="showAllInvoices"
-          @keyup.enter="showAllInvoices"
-        >
-          <div class="stat-value" style="color:var(--warning);">{{ total }}</div>
-          <div class="stat-label">{{ isCashier ? 'إجمالي فواتيرك' : 'إجمالي الفواتير' }}</div>
-        </div>
-      </div>
+<style>
+  [v-cloak] { display: none; }
+  .stat-card-action { cursor: pointer; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+  .stat-card-action:hover { transform: translateY(-2px); box-shadow: 0 14px 28px rgba(15, 23, 42, .10); border-color: #bfdbfe; }
+  .stat-card-action.active { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, .12); }
+  .quick-filter-bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    padding: 12px 14px; margin-bottom: 14px;
+    border: 1px solid #dbeafe; border-radius: 14px;
+    background: linear-gradient(135deg, #f8fbff 0%, #eef6ff 100%);
+  }
+  .quick-filter-title { font-size: 14px; font-weight: 700; color: #1e3a8a; }
+  .quick-filter-subtitle { font-size: 12px; color: #64748b; margin-top: 4px; }
+  .quick-filter-metrics { display: flex; gap: 8px; flex-wrap: wrap; }
+  .quick-filter-pill {
+    padding: 7px 12px; border-radius: 999px; background: #fff;
+    border: 1px solid #dbeafe; font-size: 12.5px; font-weight: 700; color: #0f172a;
+  }
+  .data-table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+  .data-table thead th {
+    background: #f9fafb; font-weight: 700; color: #64748b;
+    font-size: .75rem; text-transform: uppercase; letter-spacing: .04em;
+    border-bottom: 1px solid #e2e8f0; padding: 10px 14px; white-space: nowrap;
+  }
+  .data-table tbody td { padding: 10px 14px; vertical-align: middle; border-bottom: 1px solid #f1f5f9; }
+  .data-table tbody tr:hover { background: #f0fdf4; }
+  .table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
-      <!-- Filters -->
-      <div class="card" style="margin-bottom:14px;">
-        <div class="card-body">
-          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
-            <div class="form-group" style="margin:0;flex:1;min-width:150px;">
-              <label class="form-label">بحث برقم الفاتورة</label>
-              <input type="text" class="form-control" v-model="searchQuery" placeholder="INV-..." style="direction:ltr;">
-            </div>
-            <div class="form-group" style="margin:0;">
-              <label class="form-label">من تاريخ</label>
-              <input type="date" class="form-control" v-model="fromDate" style="direction:ltr;">
-            </div>
-            <div class="form-group" style="margin:0;">
-              <label class="form-label">إلى تاريخ</label>
-              <input type="date" class="form-control" v-model="toDate" style="direction:ltr;">
-            </div>
-            <button class="btn btn-primary" @click="loadInvoices(1)">🔍 بحث</button>
-            <button class="btn btn-outline" @click="resetFilters">مسح</button>
-          </div>
-        </div>
-      </div>
+  /* Modal overlay */
+  .modal-overlay {
+    position: fixed; inset: 0; z-index: 1050;
+    background: rgba(0,0,0,.45); display: flex;
+    align-items: center; justify-content: center;
+    padding: 16px; overflow-y: auto;
+  }
+  .modal-box {
+    background: #fff; border-radius: 16px; width: 100%;
+    max-width: 600px; max-height: 90vh; overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0,0,0,.2);
+  }
+  .modal-box .modal-header {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+    padding: 16px 20px; background: var(--primary); color: #fff;
+    border-radius: 16px 16px 0 0;
+  }
+  .modal-box .modal-header h5 { margin: 0; font-size: 1rem; font-weight: 700; }
+  .modal-box .modal-header .btn-close { filter: invert(1); }
+  .modal-box .modal-body { padding: 20px; }
+  .modal-box .modal-footer {
+    display: flex; gap: 8px; justify-content: flex-end;
+    padding: 14px 20px; border-top: 1px solid #e2e8f0;
+  }
 
-      <!-- Table -->
-      <div class="card">
-        <div class="quick-filter-bar" v-if="activeQuickFilter">
-          <div>
-            <div class="quick-filter-title">{{ quickFilterTitle }}</div>
-            <div class="quick-filter-subtitle">
-              {{ activeQuickFilter === 'all' ? 'عرض كل النتائج المتاحة لك' : `عرض فواتير يوم ${fromDate}` }}
-            </div>
-          </div>
-          <div class="quick-filter-metrics">
-            <span class="quick-filter-pill">الإجمالي: {{ formatMoney(visibleNetTotal) }}</span>
-            <span class="quick-filter-pill">المدفوعات: {{ formatMoney(visiblePaidTotal) }}</span>
-            <span class="quick-filter-pill">باقي العميل: {{ formatMoney(visibleChangeTotal) }}</span>
-          </div>
-          <button class="btn btn-sm btn-outline" @click="resetFilters">مسح الفلتر</button>
-        </div>
+  /* Receipt print styles */
+  .thermal-print-root {
+    position: fixed; top: 0; left: -99999px;
+    width: 72mm; background: #fff; color: #111827; padding: 0; z-index: -1;
+  }
+  .receipt-shell { padding: 8px 6px; font-size: 11px; direction: rtl; text-align: right; }
+  .receipt-header { text-align: center; margin-bottom: 10px; }
+  .receipt-header h2 { font-size: 16px; font-weight: 800; margin: 0; color: #1e293b; }
+  .receipt-subtitle { font-size: 10px; color: #64748b; margin: 2px 0 0; }
+  .receipt-meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; font-size: 10px; }
+  .receipt-meta-row { display: flex; justify-content: space-between; }
+  .receipt-divider { border: none; border-top: 1px dashed #94a3b8; margin: 8px 0; }
+  .receipt-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+  .receipt-table th { text-align: right; color: #64748b; padding: 4px 2px; border-bottom: 1px solid #e2e8f0; }
+  .receipt-table td { padding: 3px 2px; }
+  .receipt-item-name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .receipt-summary-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 10px; }
+  .receipt-summary-grand { font-size: 13px; font-weight: 800; color: #16a34a; border-top: 1px dashed #94a3b8; padding-top: 6px; margin-top: 4px; }
+  .receipt-summary-change { color: #2563eb; font-weight: 700; }
+  .receipt-footer { text-align: center; font-size: 10px; color: #64748b; margin-top: 8px; }
+  .receipt-footer-note { text-align: center; font-size: 9px; color: #94a3b8; margin-top: 2px; }
 
-        <div class="table-wrapper">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>رقم الفاتورة</th>
-                <th>التاريخ</th>
-                <th>الأصناف</th>
-                <th>الإجمالي</th>
-                <th>المدفوع</th>
-                <th>الباقي</th>
-                <th>طريقة الدفع</th>
-                <th>الكاشير</th>
-                <th>إجراءات</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-if="loading">
-                <td colspan="9" class="text-center" style="padding:40px;">
-                  <span class="spinner" style="width:24px;height:24px;border-color:#e2e8f0;border-top-color:var(--primary);"></span>
-                </td>
-              </tr>
-              <tr v-else-if="!invoices.length">
-                <td colspan="9" class="text-center" style="padding:40px;color:#94a3b8;">لا توجد فواتير</td>
-              </tr>
-              <tr v-for="inv in invoices" :key="inv.id">
-                <td style="direction:ltr;text-align:right;font-weight:700;font-size:12px;color:var(--primary);">{{ inv.invoice_number }}</td>
-                <td style="font-size:12px;color:#64748b;white-space:nowrap;">{{ formatDate(inv.created_at) }}</td>
-                <td class="text-center">{{ inv.items_count }}</td>
-                <td class="fw-bold">{{ formatMoney(inv.net_total) }}</td>
-                <td>{{ formatMoney(inv.paid_amount) }}</td>
-                <td :style="inv.change_amount > 0 ? 'color:var(--success);font-weight:600' : ''">
-                  {{ formatMoney(inv.change_amount) }}
-                </td>
-                <td>
-                  <span :class="inv.payment_method === 'cash' ? 'badge badge-success' : inv.payment_method === 'card' ? 'badge badge-info' : 'badge badge-gray'">
-                    {{ inv.payment_method === 'cash' ? '💵 نقدي' : inv.payment_method === 'card' ? '💳 بطاقة' : 'أخرى' }}
-                  </span>
-                </td>
-                <td class="text-muted" style="font-size:12px;">{{ inv.cashier_name || '-' }}</td>
-                <td>
-                  <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;">
-                    <button class="btn btn-sm btn-outline" @click="viewInvoice(inv.id)">عرض</button>
-                    <button class="btn btn-sm btn-primary" @click="openEditInvoice(inv.id)">تعديل</button>
-                    <button
-                      class="btn btn-sm btn-danger"
-                      @click="deleteInvoice(inv)"
-                      :disabled="deletingInvoiceId === inv.id"
-                    >
-                      <span v-if="deletingInvoiceId !== inv.id">حذف</span>
-                      <span v-else class="spinner" style="width:12px;height:12px;border-width:2px;"></span>
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+  /* Modal detail grid responsive */
+  .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; font-size: 13px; }
 
-        <!-- Pagination -->
-        <div style="padding:14px 18px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid #f1f5f9;" v-if="total > limit">
-          <span style="font-size:13px;color:#64748b;">{{ total }} فاتورة إجمالاً</span>
-          <div style="display:flex;gap:4px;">
-            <button class="btn btn-sm btn-outline" :disabled="currentPage <= 1" @click="loadInvoices(currentPage-1)">السابق</button>
-            <button class="btn btn-sm btn-outline" :disabled="currentPage * limit >= total" @click="loadInvoices(currentPage+1)">التالي</button>
-          </div>
+  /* Responsive */
+  @media (max-width: 640px) {
+    .stats-grid { grid-template-columns: repeat(2, 1fr) !important; }
+    .modal-box { max-width: 100%; margin: 8px; border-radius: 12px; }
+    .modal-box .modal-header { flex-direction: column; align-items: flex-start; }
+    .modal-box .modal-header div:last-child { width: 100%; justify-content: flex-start; }
+    .detail-grid { grid-template-columns: 1fr; }
+    .edit-fields-grid { grid-template-columns: 1fr !important; }
+  }
+  @media print {
+    body * { visibility: hidden; }
+    #invoice-receipt, #invoice-receipt * { visibility: visible; }
+    #invoice-receipt { position: absolute; left: 0; top: 0; width: 72mm; }
+  }
+</style>
+
+<div id="app" v-cloak>
+  <!-- Stats -->
+  <div class="stats-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:18px;">
+    <div class="stat-card stat-card-action" :class="{ active: activeQuickFilter === 'today-invoices' }" role="button" tabindex="0" @click="applyTodayInvoicesFilter" @keyup.enter="applyTodayInvoicesFilter">
+      <div class="stat-value" style="color:var(--primary);">{{ todayStats.invoices_count || 0 }}</div>
+      <div class="stat-label">{{ isCashier ? 'فواتيرك اليوم' : 'فواتير اليوم' }}</div>
+    </div>
+    <div class="stat-card stat-card-action" :class="{ active: activeQuickFilter === 'today-sales' }" role="button" tabindex="0" @click="applyTodaySalesFilter" @keyup.enter="applyTodaySalesFilter">
+      <div class="stat-value" style="color:var(--success);">{{ formatMoney(todayStats.total_sales || 0) }}</div>
+      <div class="stat-label">{{ isCashier ? 'إيرادك اليوم' : 'مبيعات اليوم' }}</div>
+    </div>
+    <div class="stat-card stat-card-action" :class="{ active: activeQuickFilter === 'all' }" role="button" tabindex="0" @click="showAllInvoices" @keyup.enter="showAllInvoices">
+      <div class="stat-value" style="color:var(--warning);">{{ total }}</div>
+      <div class="stat-label">{{ isCashier ? 'إجمالي فواتيرك' : 'إجمالي الفواتير' }}</div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-body">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+        <div class="form-group" style="margin:0;flex:1;min-width:150px;">
+          <label class="form-label">بحث برقم الفاتورة</label>
+          <input type="text" class="form-control" v-model="searchQuery" placeholder="INV-..." style="direction:ltr;">
         </div>
+        <div class="form-group" style="margin:0;">
+          <label class="form-label">من تاريخ</label>
+          <input type="date" class="form-control" v-model="fromDate" style="direction:ltr;">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label class="form-label">إلى تاريخ</label>
+          <input type="date" class="form-control" v-model="toDate" style="direction:ltr;">
+        </div>
+        <button class="btn btn-primary" @click="loadInvoices(1)">🔍 بحث</button>
+        <button class="btn btn-outline" @click="resetFilters">مسح</button>
       </div>
     </div>
-</div>
+  </div>
 
+  <!-- Table -->
+  <div class="card">
+    <div class="quick-filter-bar" v-if="activeQuickFilter">
+      <div>
+        <div class="quick-filter-title">{{ quickFilterTitle }}</div>
+        <div class="quick-filter-subtitle">{{ activeQuickFilter === 'all' ? 'عرض كل النتائج المتاحة لك' : `عرض فواتير يوم ${fromDate}` }}</div>
+      </div>
+      <div class="quick-filter-metrics">
+        <span class="quick-filter-pill">الإجمالي: {{ formatMoney(visibleNetTotal) }}</span>
+        <span class="quick-filter-pill">المدفوعات: {{ formatMoney(visiblePaidTotal) }}</span>
+        <span class="quick-filter-pill">باقي العميل: {{ formatMoney(visibleChangeTotal) }}</span>
+      </div>
+      <button class="btn btn-sm btn-outline" @click="resetFilters">مسح الفلتر</button>
+    </div>
+
+    <div class="table-wrapper">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>رقم الفاتورة</th>
+            <th>التاريخ</th>
+            <th>الأصناف</th>
+            <th>الإجمالي</th>
+            <th>المدفوع</th>
+            <th>الباقي</th>
+            <th>طريقة الدفع</th>
+            <th>الكاشير</th>
+            <th>إجراءات</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-if="loading">
+            <td colspan="9" class="text-center" style="padding:40px;">
+              <span class="spinner" style="width:24px;height:24px;border-color:#e2e8f0;border-top-color:var(--primary);"></span>
+            </td>
+          </tr>
+          <tr v-else-if="!invoices.length">
+            <td colspan="9" class="text-center" style="padding:40px;color:#94a3b8;">لا توجد فواتير</td>
+          </tr>
+          <tr v-for="inv in invoices" :key="inv.id">
+            <td style="direction:ltr;text-align:right;font-weight:700;font-size:12px;color:var(--primary);white-space:nowrap;">{{ inv.invoice_number }}</td>
+            <td style="font-size:12px;color:#64748b;white-space:nowrap;">{{ formatDate(inv.created_at) }}</td>
+            <td class="text-center">{{ inv.items_count }}</td>
+            <td class="fw-bold">{{ formatMoney(inv.net_total) }}</td>
+            <td>{{ formatMoney(inv.paid_amount) }}</td>
+            <td :style="inv.change_amount > 0 ? 'color:var(--success);font-weight:600' : ''">{{ formatMoney(inv.change_amount) }}</td>
+            <td>
+              <span :class="inv.payment_method === 'cash' ? 'badge badge-cash' : inv.payment_method === 'visa' || inv.payment_method === 'card' ? 'badge badge-paid' : 'badge badge-pending'">
+                {{ inv.payment_method === 'cash' ? '💵 نقدي' : inv.payment_method === 'card' || inv.payment_method === 'visa' ? '💳 بطاقة' : inv.payment_method === 'instapay' ? '📱 انستاباي' : inv.payment_method }}
+              </span>
+            </td>
+            <td class="text-muted" style="font-size:12px;">{{ inv.cashier_name || '-' }}</td>
+            <td>
+              <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;">
+                <button class="btn btn-sm btn-outline" @click="viewInvoice(inv.id)">عرض</button>
+                <button class="btn btn-sm btn-primary" @click="openEditInvoice(inv.id)">تعديل</button>
+                <button class="btn btn-sm btn-warning" @click="openReturnForInvoice(inv.id)">مرتجع</button>
+                <button class="btn btn-sm btn-danger" @click="deleteInvoice(inv)" :disabled="deletingInvoiceId === inv.id">
+                  <span v-if="deletingInvoiceId !== inv.id">حذف</span>
+                  <span v-else class="spinner" style="width:12px;height:12px;border-width:2px;"></span>
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <div style="padding:14px 18px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid #f1f5f9;flex-wrap:wrap;gap:8px;" v-if="total > limit">
+      <span style="font-size:13px;color:#64748b;">{{ total }} فاتورة إجمالاً</span>
+      <div style="display:flex;gap:4px;">
+        <button class="btn btn-sm btn-outline" :disabled="currentPage <= 1" @click="loadInvoices(Math.max(1, currentPage-1))">السابق</button>
+        <button class="btn btn-sm btn-outline" :disabled="currentPage * limit >= total" @click="loadInvoices(currentPage+1)">التالي</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Receipt for printing -->
   <div id="invoice-receipt" class="thermal-print-root" v-if="selectedInvoice">
     <div class="receipt-shell">
-      <div class="receipt-brand-mark"></div>
       <div class="receipt-header">
         <h2>{{ shopName || 'المحل' }}</h2>
         <p class="receipt-subtitle">فاتورة بيع نقدي</p>
       </div>
       <div class="receipt-meta-grid">
-        <div class="receipt-meta-row">
-          <span>رقم الفاتورة</span>
-          <strong>{{ selectedInvoice.invoice_number }}</strong>
-        </div>
-        <div class="receipt-meta-row">
-          <span>التاريخ</span>
-          <strong>{{ formatDate(selectedInvoice.created_at) }}</strong>
-        </div>
-        <div class="receipt-meta-row">
-          <span>الكاشير</span>
-          <strong>{{ selectedInvoice.cashier_name || '-' }}</strong>
-        </div>
-        <div class="receipt-meta-row">
-          <span>الدفع</span>
-          <strong>{{ paymentMethodLabel(selectedInvoice.payment_method) }}</strong>
-        </div>
+        <div class="receipt-meta-row"><span>رقم الفاتورة</span><strong>{{ selectedInvoice.invoice_number }}</strong></div>
+        <div class="receipt-meta-row"><span>التاريخ</span><strong>{{ formatDate(selectedInvoice.created_at) }}</strong></div>
+        <div class="receipt-meta-row"><span>الكاشير</span><strong>{{ selectedInvoice.cashier_name || '-' }}</strong></div>
+        <div class="receipt-meta-row"><span>الدفع</span><strong>{{ paymentMethodLabel(selectedInvoice.payment_method) }}</strong></div>
       </div>
       <hr class="receipt-divider">
       <table class="receipt-table">
-        <thead>
-          <tr>
-            <th>الصنف</th>
-            <th>ك</th>
-            <th>سعر</th>
-            <th>إجمالي</th>
-          </tr>
-        </thead>
+        <thead><tr><th>الصنف</th><th>ك</th><th>سعر</th><th>إجمالي</th></tr></thead>
         <tbody>
           <tr v-for="item in selectedInvoice.items" :key="'print-' + item.id">
             <td class="receipt-item-name">{{ item.product_name }}</td>
@@ -200,26 +238,11 @@
       </table>
       <hr class="receipt-divider">
       <div class="receipt-summary">
-        <div class="receipt-summary-row">
-          <span>المجموع</span>
-          <strong>{{ formatMoney(selectedInvoice.total) }}</strong>
-        </div>
-        <div class="receipt-summary-row" v-if="selectedInvoice.discount > 0">
-          <span>الخصم</span>
-          <strong>- {{ formatMoney(selectedInvoice.discount) }}</strong>
-        </div>
-        <div class="receipt-summary-row receipt-summary-grand">
-          <span>الإجمالي النهائي</span>
-          <strong>{{ formatMoney(selectedInvoice.net_total) }}</strong>
-        </div>
-        <div class="receipt-summary-row">
-          <span>المدفوع</span>
-          <strong>{{ formatMoney(selectedInvoice.paid_amount) }}</strong>
-        </div>
-        <div class="receipt-summary-row receipt-summary-change" v-if="selectedInvoice.change_amount > 0">
-          <span>الباقي</span>
-          <strong>{{ formatMoney(selectedInvoice.change_amount) }}</strong>
-        </div>
+        <div class="receipt-summary-row"><span>المجموع</span><strong>{{ formatMoney(selectedInvoice.total) }}</strong></div>
+        <div class="receipt-summary-row" v-if="selectedInvoice.discount > 0"><span>الخصم</span><strong>- {{ formatMoney(selectedInvoice.discount) }}</strong></div>
+        <div class="receipt-summary-row receipt-summary-grand"><span>الإجمالي النهائي</span><strong>{{ formatMoney(selectedInvoice.net_total) }}</strong></div>
+        <div class="receipt-summary-row"><span>المدفوع</span><strong>{{ formatMoney(selectedInvoice.paid_amount) }}</strong></div>
+        <div class="receipt-summary-row receipt-summary-change" v-if="selectedInvoice.change_amount > 0"><span>الباقي</span><strong>{{ formatMoney(selectedInvoice.change_amount) }}</strong></div>
       </div>
       <hr class="receipt-divider">
       <div class="receipt-footer">{{ receiptFooter || 'شكراً لزيارتكم' }}</div>
@@ -232,60 +255,54 @@
     <div class="modal-box" style="max-width:600px;">
       <div class="modal-header">
         <h5>🧾 فاتورة {{ selectedInvoice?.invoice_number }}</h5>
-        <div style="display:flex;gap:6px;">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
           <button class="btn btn-sm btn-primary" @click="openEditInvoice(selectedInvoice.id)">تعديل</button>
-          <button
-            class="btn btn-sm btn-danger"
-            @click="deleteInvoice(selectedInvoice)"
-            :disabled="deletingInvoiceId === selectedInvoice.id"
-          >
-            حذف
-          </button>
-          <button class="btn btn-sm btn-outline" @click="printInvoice">🖨 طباعة</button>
+          <button class="btn btn-sm btn-warning" @click="openReturnForInvoice(selectedInvoice.id)">مرتجع</button>
+          <button class="btn btn-sm btn-danger" @click="deleteInvoice(selectedInvoice)" :disabled="deletingInvoiceId === selectedInvoice.id">حذف</button>
+          <button class="btn btn-sm btn-outline" @click="printInvoice" style="color:#fff;border-color:rgba(255,255,255,.4)">🖨 طباعة</button>
           <button class="btn-close" @click="showDetail=false">✕</button>
         </div>
       </div>
-      <div class="modal-body" v-if="selectedInvoice" id="printArea">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;font-size:13px;">
+      <div class="modal-body" v-if="selectedInvoice">
+        <div class="detail-grid">
           <div><span class="text-muted">رقم الفاتورة: </span><strong style="direction:ltr;">{{ selectedInvoice.invoice_number }}</strong></div>
           <div><span class="text-muted">التاريخ: </span><strong>{{ formatDate(selectedInvoice.created_at) }}</strong></div>
           <div><span class="text-muted">الكاشير: </span><strong>{{ selectedInvoice.cashier_name || '-' }}</strong></div>
           <div><span class="text-muted">طريقة الدفع: </span><strong>{{ paymentMethodLabel(selectedInvoice.payment_method) }}</strong></div>
         </div>
 
-        <table class="data-table" style="margin-bottom:12px;">
-          <thead>
-            <tr>
-              <th>المنتج</th>
-              <th class="text-center">الكمية</th>
-              <th>سعر الوحدة</th>
-              <th>الإجمالي</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in selectedInvoice.items" :key="item.id">
-              <td class="fw-bold">{{ item.product_name }}</td>
-              <td class="text-center">{{ item.quantity }}</td>
-              <td>{{ formatMoney(item.unit_price) }}</td>
-              <td class="fw-bold" style="color:var(--primary);">{{ formatMoney(item.subtotal) }}</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="table-wrapper" style="margin-bottom:12px;">
+          <table class="data-table">
+            <thead><tr><th>المنتج</th><th class="text-center">الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th><th class="text-center">مرتجع</th></tr></thead>
+            <tbody>
+              <tr v-for="item in selectedInvoice.items" :key="item.id">
+                <td class="fw-bold">{{ item.product_name }}</td>
+                <td class="text-center">{{ item.quantity }}</td>
+                <td>{{ formatMoney(item.unit_price) }}</td>
+                <td class="fw-bold" style="color:var(--primary);">{{ formatMoney(item.subtotal) }}</td>
+                <td class="text-center">
+                  <span v-if="item.returned_qty > 0" class="text-danger fw-bold">{{ item.returned_qty }}</span>
+                  <span v-else class="text-muted" style="font-size:11px;">—</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
         <div style="border-top:2px solid #e2e8f0;padding-top:12px;">
           <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:14px;">
-            <span class="text-muted">المجموع:</span>
-            <span class="fw-bold">{{ formatMoney(selectedInvoice.total) }}</span>
+            <span class="text-muted">المجموع:</span><span class="fw-bold">{{ formatMoney(selectedInvoice.total) }}</span>
           </div>
           <div v-if="selectedInvoice.discount > 0" style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:14px;color:var(--danger);">
-            <span>الخصم:</span>
-            <span class="fw-bold">- {{ formatMoney(selectedInvoice.discount) }}</span>
+            <span>الخصم:</span><span class="fw-bold">- {{ formatMoney(selectedInvoice.discount) }}</span>
+          </div>
+          <div v-if="selectedInvoice.total_returned > 0" style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:14px;color:var(--danger);">
+            <span><i class="bi bi-arrow-return-right ms-1"></i>مرتجع:</span><span class="fw-bold">- {{ formatMoney(selectedInvoice.total_returned) }}</span>
           </div>
           <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:18px;color:var(--primary);">
-            <span class="fw-bold">الإجمالي:</span>
-            <span class="fw-800">{{ formatMoney(selectedInvoice.net_total) }}</span>
+            <span class="fw-bold">الإجمالي:</span><span class="fw-800">{{ formatMoney(selectedInvoice.net_total) }}</span>
           </div>
-          <div style="display:flex;justify-content:space-between;font-size:13px;color:#64748b;">
+          <div style="display:flex;justify-content:space-between;font-size:13px;color:#64748b;flex-wrap:wrap;">
             <span>المدفوع: {{ formatMoney(selectedInvoice.paid_amount) }}</span>
             <span>الباقي: {{ formatMoney(selectedInvoice.change_amount) }}</span>
           </div>
@@ -298,6 +315,7 @@
     </div>
   </div>
 
+  <!-- Edit Invoice Modal -->
   <div class="modal-overlay" v-if="showEdit" @click.self="closeEditModal">
     <div class="modal-box" style="max-width:980px;">
       <div class="modal-header">
@@ -305,13 +323,13 @@
         <button class="btn-close" @click="closeEditModal">✕</button>
       </div>
       <div class="modal-body">
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px;">
+        <div class="edit-fields-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px;">
           <div class="form-group" style="margin:0;">
             <label class="form-label">طريقة الدفع</label>
             <select class="form-control" v-model="editInvoice.payment_method">
               <option value="cash">نقدي</option>
               <option value="card">بطاقة</option>
-              <option value="other">أخرى</option>
+              <option value="instapay">انستاباي</option>
             </select>
           </div>
           <div class="form-group" style="margin:0;">
@@ -329,54 +347,26 @@
         </div>
 
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
-          <div class="text-muted" style="font-size:12px;">
-            يمكنك كتابة اسم المنتج أو اختيار باركوده من القائمة المقترحة.
-          </div>
+          <div class="text-muted" style="font-size:12px;">يمكنك كتابة اسم المنتج أو اختيار باركوده من القائمة المقترحة.</div>
           <button class="btn btn-sm btn-outline" @click="addEditItem">+ إضافة صنف</button>
         </div>
 
         <div class="table-wrapper" style="margin-bottom:14px;">
           <table class="data-table">
-            <thead>
-              <tr>
-                <th>الصنف</th>
-                <th>الكمية</th>
-                <th>سعر الوحدة</th>
-                <th>الإجمالي</th>
-                <th>حذف</th>
-              </tr>
-            </thead>
+            <thead><tr><th>الصنف</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th><th>حذف</th></tr></thead>
             <tbody>
               <tr v-if="!editInvoice.items.length">
                 <td colspan="5" class="text-center" style="padding:28px;color:#94a3b8;">لا توجد أصناف في الفاتورة</td>
               </tr>
               <tr v-for="(item, index) in editInvoice.items" :key="item.uid">
-                <td style="min-width:280px;">
-                  <input
-                    type="text"
-                    class="form-control"
-                    v-model.trim="item.product_name"
-                    list="invoice-products-list"
-                    placeholder="اسم المنتج أو الباركود"
-                    @change="syncEditItemProduct(item)"
-                    @blur="syncEditItemProduct(item)"
-                  >
-                  <div v-if="findProductStock(item.product_id) !== null" class="text-muted" style="font-size:11px;margin-top:4px;">
-                    المخزون الحالي: {{ findProductStock(item.product_id) }}
-                  </div>
+                <td style="min-width:220px;">
+                  <input type="text" class="form-control" v-model.trim="item.product_name" list="invoice-products-list" placeholder="اسم المنتج أو الباركود" @change="syncEditItemProduct(item)" @blur="syncEditItemProduct(item)">
+                  <div v-if="findProductStock(item.product_id) !== null" class="text-muted" style="font-size:11px;margin-top:4px;">المخزون الحالي: {{ findProductStock(item.product_id) }}</div>
                 </td>
-                <td style="min-width:140px;">
-                  <input type="number" class="form-control" v-model.number="item.quantity" min="0.001" step="0.001" style="direction:ltr;">
-                </td>
-                <td style="min-width:160px;">
-                  <input type="number" class="form-control" v-model.number="item.unit_price" min="0" step="0.01" style="direction:ltr;">
-                </td>
-                <td class="fw-bold" style="color:var(--primary);white-space:nowrap;">
-                  {{ formatMoney(editLineSubtotal(item)) }}
-                </td>
-                <td>
-                  <button class="btn btn-sm btn-danger" @click="removeEditItem(index)">حذف</button>
-                </td>
+                <td><input type="number" class="form-control" v-model.number="item.quantity" min="0.001" step="0.001" style="direction:ltr;width:110px;"></td>
+                <td><input type="number" class="form-control" v-model.number="item.unit_price" min="0" step="0.01" style="direction:ltr;width:120px;"></td>
+                <td class="fw-bold" style="color:var(--primary);white-space:nowrap;">{{ formatMoney(editLineSubtotal(item)) }}</td>
+                <td><button class="btn btn-sm btn-danger" @click="removeEditItem(index)">حذف</button></td>
               </tr>
             </tbody>
           </table>
@@ -387,9 +377,7 @@
           <option v-for="p in barcodeProducts" :key="'prod-code-' + p.id" :value="p.barcode">{{ p.name }}</option>
         </datalist>
 
-        <div v-if="editError" style="background:#fee2e2;color:#b91c1c;border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:13px;">
-          {{ editError }}
-        </div>
+        <div v-if="editError" style="background:#fee2e2;color:#b91c1c;border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:13px;">{{ editError }}</div>
 
         <div style="display:flex;justify-content:flex-end;">
           <div style="width:100%;max-width:320px;border:1px solid #e2e8f0;border-radius:14px;padding:14px 16px;background:#f8fafc;">
@@ -406,8 +394,7 @@
               <strong>{{ formatMoney(editInvoiceNetTotal) }}</strong>
             </div>
             <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px;color:#64748b;">
-              <span>المدفوع</span>
-              <span>{{ formatMoney(editInvoice.paid_amount || 0) }}</span>
+              <span>المدفوع</span><span>{{ formatMoney(editInvoice.paid_amount || 0) }}</span>
             </div>
             <div style="display:flex;justify-content:space-between;font-size:13px;" :style="editInvoiceRemaining > 0 ? 'color:var(--warning);font-weight:700;' : 'color:var(--success);font-weight:700;'">
               <span>{{ editInvoiceRemaining > 0 ? 'المتبقي' : 'الباقي' }}</span>
@@ -429,6 +416,7 @@
   <div id="toast-container"></div>
 </div>
 
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
 <script src="/js/app.js"></script>
 <script>
 const { createApp, ref, onMounted, computed } = Vue;
@@ -477,58 +465,30 @@ createApp({
     function createEditDraft(invoice = {}) {
       const invoiceNetTotal = Math.max(0, Number(invoice.net_total) || 0);
       const existingPaidAmount = Number(invoice.paid_amount) || 0;
-
       return {
         id: invoice.id || null,
         invoice_number: invoice.invoice_number || '',
         payment_method: invoice.payment_method || 'cash',
         discount: Number(invoice.discount) || 0,
         paid_amount: invoice.paid_amount === undefined || invoice.paid_amount === null || invoice.paid_amount === ''
-          ? invoiceNetTotal
-          : Math.max(invoiceNetTotal, existingPaidAmount),
+          ? invoiceNetTotal : Math.max(invoiceNetTotal, existingPaidAmount),
         notes: invoice.notes || '',
         items: Array.isArray(invoice.items) ? invoice.items.map(createEditItem) : []
       };
     }
 
-    const editInvoiceTotal = computed(() => (
-      editInvoice.value.items.reduce((sum, item) => sum + editLineSubtotal(item), 0)
-    ));
-
-    const editInvoiceNetTotal = computed(() => (
-      Math.max(0, editInvoiceTotal.value - (Number(editInvoice.value.discount) || 0))
-    ));
-
-    const editInvoiceChange = computed(() => (
-      Math.max(0, (Number(editInvoice.value.paid_amount) || 0) - editInvoiceNetTotal.value)
-    ));
-
-    const editInvoiceRemaining = computed(() => (
-      Math.max(0, editInvoiceNetTotal.value - (Number(editInvoice.value.paid_amount) || 0))
-    ));
-
-    const visibleNetTotal = computed(() => (
-      invoices.value.reduce((sum, invoice) => sum + (Number(invoice.net_total) || 0), 0)
-    ));
-
-    const visiblePaidTotal = computed(() => (
-      invoices.value.reduce((sum, invoice) => sum + (Number(invoice.paid_amount) || 0), 0)
-    ));
-
-    const visibleChangeTotal = computed(() => (
-      invoices.value.reduce((sum, invoice) => sum + (Number(invoice.change_amount) || 0), 0)
-    ));
+    const editInvoiceTotal = computed(() => editInvoice.value.items.reduce((sum, item) => sum + editLineSubtotal(item), 0));
+    const editInvoiceNetTotal = computed(() => Math.max(0, editInvoiceTotal.value - (Number(editInvoice.value.discount) || 0)));
+    const editInvoiceChange = computed(() => Math.max(0, (Number(editInvoice.value.paid_amount) || 0) - editInvoiceNetTotal.value));
+    const editInvoiceRemaining = computed(() => Math.max(0, editInvoiceNetTotal.value - (Number(editInvoice.value.paid_amount) || 0)));
+    const visibleNetTotal = computed(() => invoices.value.reduce((sum, inv) => sum + (Number(inv.net_total) || 0), 0));
+    const visiblePaidTotal = computed(() => invoices.value.reduce((sum, inv) => sum + (Number(inv.paid_amount) || 0), 0));
+    const visibleChangeTotal = computed(() => invoices.value.reduce((sum, inv) => sum + (Number(inv.change_amount) || 0), 0));
 
     const quickFilterTitle = computed(() => {
-      if (activeQuickFilter.value === 'today-sales') {
-        return isCashier.value ? 'إيرادك اليوم وفواتيرك' : 'مبيعات اليوم وفواتيره';
-      }
-      if (activeQuickFilter.value === 'today-invoices') {
-        return isCashier.value ? 'فواتيرك اليوم' : 'فواتير اليوم';
-      }
-      if (activeQuickFilter.value === 'all') {
-        return isCashier.value ? 'كل فواتيرك' : 'كل الفواتير';
-      }
+      if (activeQuickFilter.value === 'today-sales') return isCashier.value ? 'إيرادك اليوم وفواتيرك' : 'مبيعات اليوم وفواتيره';
+      if (activeQuickFilter.value === 'today-invoices') return isCashier.value ? 'فواتيرك اليوم' : 'فواتير اليوم';
+      if (activeQuickFilter.value === 'all') return isCashier.value ? 'كل فواتيرك' : 'كل الفواتير';
       return '';
     });
 
@@ -539,32 +499,24 @@ createApp({
 
     function formatDate(s) {
       if (!s) return '-';
-      return new Date(s).toLocaleDateString('ar-EG', {
-        year: 'numeric', month: 'short', day: 'numeric',
-        hour: '2-digit', minute: '2-digit'
-      });
+      return new Date(s).toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     }
 
     function paymentMethodLabel(method) {
-      return method === 'cash' ? 'نقدي' : method === 'card' ? 'بطاقة' : 'أخرى';
+      return method === 'cash' ? 'نقدي' : method === 'card' || method === 'visa' ? 'بطاقة' : method === 'instapay' ? 'انستاباي' : method || 'نقدي';
     }
 
     function getLocalDateValue() {
       const now = new Date();
-      const timezoneAdjusted = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
-      return timezoneAdjusted.toISOString().slice(0, 10);
+      return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
     }
 
-    function focusInvoicesTable() {
-      requestAnimationFrame(() => {
-        document.querySelector('.data-table')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      });
+    function focusTable() {
+      requestAnimationFrame(() => document.querySelector('.data-table')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
     }
 
     function editLineSubtotal(item) {
-      const quantity = Number(item.quantity) || 0;
-      const unitPrice = Number(item.unit_price) || 0;
-      return quantity * unitPrice;
+      return (Number(item.quantity) || 0) * (Number(item.unit_price) || 0);
     }
 
     async function loadInvoices(page = 1) {
@@ -573,7 +525,7 @@ createApp({
       const params = new URLSearchParams({ page, limit: limit.value });
       if (searchQuery.value) params.append('search', searchQuery.value);
       if (fromDate.value) params.append('from', fromDate.value);
-      if (toDate.value)   params.append('to', toDate.value);
+      if (toDate.value) params.append('to', toDate.value);
       const r = await fetch('/api/invoices?' + params);
       const d = await r.json();
       if (d.success) { invoices.value = d.data; total.value = d.total; }
@@ -595,29 +547,25 @@ createApp({
 
     async function applyTodayInvoicesFilter() {
       const today = getLocalDateValue();
-      fromDate.value = today;
-      toDate.value = today;
+      fromDate.value = today; toDate.value = today;
       activeQuickFilter.value = 'today-invoices';
       await loadInvoices(1);
-      focusInvoicesTable();
+      focusTable();
     }
 
     async function applyTodaySalesFilter() {
       const today = getLocalDateValue();
-      fromDate.value = today;
-      toDate.value = today;
+      fromDate.value = today; toDate.value = today;
       activeQuickFilter.value = 'today-sales';
       await loadInvoices(1);
-      focusInvoicesTable();
+      focusTable();
     }
 
     async function showAllInvoices() {
-      searchQuery.value = '';
-      fromDate.value = '';
-      toDate.value = '';
+      searchQuery.value = ''; fromDate.value = ''; toDate.value = '';
       activeQuickFilter.value = 'all';
       await loadInvoices(1);
-      focusInvoicesTable();
+      focusTable();
     }
 
     async function loadTodayStats() {
@@ -632,13 +580,8 @@ createApp({
       if (d.success) { selectedInvoice.value = d.data; showDetail.value = true; }
     }
 
-    function addEditItem() {
-      editInvoice.value.items.push(createEditItem());
-    }
-
-    function removeEditItem(index) {
-      editInvoice.value.items.splice(index, 1);
-    }
+    function addEditItem() { editInvoice.value.items.push(createEditItem()); }
+    function removeEditItem(index) { editInvoice.value.items.splice(index, 1); }
 
     function findProductById(productId) {
       return productsCatalog.value.find((product) => Number(product.id) === Number(productId)) || null;
@@ -652,36 +595,25 @@ createApp({
     function findProductByLookup(keyword) {
       const value = String(keyword || '').trim();
       if (!value) return null;
-      return productsCatalog.value.find((product) => (
-        product.name === value || (product.barcode && product.barcode === value)
-      )) || null;
+      return productsCatalog.value.find((product) => product.name === value || (product.barcode && product.barcode === value)) || null;
     }
 
     function syncEditItemProduct(item) {
       const typedValue = String(item.product_name || '').trim();
       const product = findProductByLookup(typedValue);
-
       if (!product) {
-        if (typedValue !== String(item.linked_name || '').trim()) {
-          item.product_id = null;
-          item.barcode = '';
-        }
+        if (typedValue !== String(item.linked_name || '').trim()) { item.product_id = null; item.barcode = ''; }
         return;
       }
-
       item.product_id = Number(product.id);
       item.product_name = product.name;
       item.linked_name = product.name;
       item.barcode = product.barcode || '';
-      if (!(Number(item.unit_price) > 0)) {
-        item.unit_price = Number(product.price) || 0;
-      }
+      if (!(Number(item.unit_price) > 0)) item.unit_price = Number(product.price) || 0;
     }
 
     function closeEditModal() {
-      showEdit.value = false;
-      editSaving.value = false;
-      editError.value = '';
+      showEdit.value = false; editSaving.value = false; editError.value = '';
       reopenDetailAfterEdit.value = false;
       editInvoice.value = createEditDraft();
     }
@@ -690,69 +622,34 @@ createApp({
       await loadProductsCatalog();
       const r = await fetch(`/api/invoices/${id}`);
       const d = await r.json();
-      if (!d.success) {
-        showToast(d.message || 'تعذر تحميل بيانات الفاتورة', 'error');
-        return;
-      }
-
+      if (!d.success) { showToast(d.message || 'تعذر تحميل بيانات الفاتورة', 'error'); return; }
       reopenDetailAfterEdit.value = showDetail.value && selectedInvoice.value?.id === d.data.id;
-      showDetail.value = false;
-      editError.value = '';
+      showDetail.value = false; editError.value = '';
       editInvoice.value = createEditDraft(d.data);
       if (!editInvoice.value.items.length) addEditItem();
       showEdit.value = true;
     }
 
     async function saveInvoiceEdit() {
-      const preparedItems = editInvoice.value.items
-        .map((item) => {
-          const typedName = String(item.product_name || '').trim();
-          const matchedProduct = findProductByLookup(typedName);
-          const keepLinkedProduct = item.product_id && typedName === String(item.linked_name || '').trim();
+      const preparedItems = editInvoice.value.items.map((item) => {
+        const typedName = String(item.product_name || '').trim();
+        const matchedProduct = findProductByLookup(typedName);
+        const keepLinkedProduct = item.product_id && typedName === String(item.linked_name || '').trim();
+        return {
+          product_id: matchedProduct ? Number(matchedProduct.id) : keepLinkedProduct ? Number(item.product_id) : null,
+          product_name: matchedProduct ? matchedProduct.name : typedName,
+          barcode: matchedProduct ? (matchedProduct.barcode || null) : (String(item.barcode || '').trim() || null),
+          quantity: Number(item.quantity), unit_price: Number(item.unit_price)
+        };
+      }).filter((item) => item.product_name || item.quantity || item.unit_price);
 
-          return {
-            product_id: matchedProduct
-              ? Number(matchedProduct.id)
-              : keepLinkedProduct
-                ? Number(item.product_id)
-                : null,
-            product_name: matchedProduct ? matchedProduct.name : typedName,
-            barcode: matchedProduct
-              ? (matchedProduct.barcode || null)
-              : (String(item.barcode || '').trim() || null),
-            quantity: Number(item.quantity),
-            unit_price: Number(item.unit_price)
-          };
-        })
-        .filter((item) => item.product_name || item.quantity || item.unit_price);
+      if (!preparedItems.length) { editError.value = 'أضف صنفًا واحدًا على الأقل'; return; }
+      const invalidItem = preparedItems.find((item) => !item.product_name || !Number.isFinite(item.quantity) || item.quantity <= 0 || !Number.isFinite(item.unit_price) || item.unit_price < 0);
+      if (invalidItem) { editError.value = 'راجع اسم الصنف والكمية والسعر قبل الحفظ'; return; }
 
-      if (!preparedItems.length) {
-        editError.value = 'أضف صنفًا واحدًا على الأقل';
-        return;
-      }
-
-      const invalidItem = preparedItems.find((item) => (
-        !item.product_name ||
-        !Number.isFinite(item.quantity) ||
-        item.quantity <= 0 ||
-        !Number.isFinite(item.unit_price) ||
-        item.unit_price < 0
-      ));
-
-      if (invalidItem) {
-        editError.value = 'راجع اسم الصنف والكمية والسعر قبل الحفظ';
-        return;
-      }
-
-      editSaving.value = true;
-      editError.value = '';
-
-      const finalPaidAmount = Math.max(
-        editInvoiceNetTotal.value,
-        Number(editInvoice.value.paid_amount) || 0
-      );
+      editSaving.value = true; editError.value = '';
+      const finalPaidAmount = Math.max(editInvoiceNetTotal.value, Number(editInvoice.value.paid_amount) || 0);
       editInvoice.value.paid_amount = finalPaidAmount;
-
       const r = await fetch(`/api/invoices/${editInvoice.value.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -766,65 +663,38 @@ createApp({
       });
       const d = await r.json();
       editSaving.value = false;
-
-      if (!d.success) {
-        editError.value = d.message || 'تعذر حفظ التعديل';
-        return;
-      }
-
+      if (!d.success) { editError.value = d.message || 'تعذر حفظ التعديل'; return; }
       showToast(d.message || 'تم تحديث الفاتورة', 'success');
       showEdit.value = false;
       await loadTodayStats();
       await loadInvoices(currentPage.value);
-
-      if (reopenDetailAfterEdit.value) {
-        await viewInvoice(editInvoice.value.id);
-      }
-
+      if (reopenDetailAfterEdit.value) await viewInvoice(editInvoice.value.id);
       reopenDetailAfterEdit.value = false;
       editInvoice.value = createEditDraft();
     }
 
     async function deleteInvoice(invoice) {
       if (!invoice?.id || deletingInvoiceId.value) return;
-
-      const invoiceNumber = invoice.invoice_number || '';
-      if (!confirm(`حذف الفاتورة ${invoiceNumber}؟ سيتم عكس حركة المخزون المرتبطة بها.`)) {
-        return;
-      }
-
+      if (!confirm(`حذف الفاتورة ${invoice.invoice_number || ''}؟ سيتم عكس حركة المخزون المرتبطة بها.`)) return;
       deletingInvoiceId.value = invoice.id;
-
       try {
         const r = await fetch(`/api/invoices/${invoice.id}`, { method: 'DELETE' });
         const d = await r.json();
-
-        if (!d.success) {
-          showToast(d.message || 'تعذر حذف الفاتورة', 'error');
-          return;
-        }
-
+        if (!d.success) { showToast(d.message || 'تعذر حذف الفاتورة', 'error'); return; }
         showToast(d.message || 'تم حذف الفاتورة', 'success');
-        showDetail.value = false;
-        selectedInvoice.value = null;
-
-        if (showEdit.value && editInvoice.value.id === invoice.id) {
-          closeEditModal();
-        }
-
+        showDetail.value = false; selectedInvoice.value = null;
+        if (showEdit.value && editInvoice.value.id === invoice.id) closeEditModal();
         await loadTodayStats();
-
-        const nextPage = invoices.value.length === 1 && currentPage.value > 1
-          ? currentPage.value - 1
-          : currentPage.value;
+        const nextPage = invoices.value.length === 1 && currentPage.value > 1 ? currentPage.value - 1 : currentPage.value;
         await loadInvoices(nextPage);
-      } catch (error) {
-        showToast('خطأ في الاتصال بالخادم', 'error');
-      } finally {
-        deletingInvoiceId.value = null;
-      }
+      } catch { showToast('خطأ في الاتصال بالخادم', 'error'); }
+      finally { deletingInvoiceId.value = null; }
     }
 
+    function openReturnForInvoice(id) {
+      showDetail.value = false;
+      if (window.openInvoiceReturnModal) window.openInvoiceReturnModal(id);
+    }
     function printInvoice() { window.print(); }
     function doLogout() { if (confirm('تسجيل الخروج؟')) logout(); }
 
@@ -852,10 +722,139 @@ createApp({
       loadInvoices, resetFilters, applyTodayInvoicesFilter, applyTodaySalesFilter, showAllInvoices,
       viewInvoice, openEditInvoice, closeEditModal,
       addEditItem, removeEditItem, syncEditItemProduct, findProductStock,
-      saveInvoiceEdit, deleteInvoice, printInvoice, doLogout,
+      saveInvoiceEdit, deleteInvoice, openReturnForInvoice, printInvoice, doLogout,
     };
   }
 }).mount('#app');
 </script>
-</body>
-</html>
+
+<!-- Return Modal -->
+<div class="modal fade" id="invReturnModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title"><i class="bi bi-arrow-return-right text-warning me-1"></i>تسجيل مرتجع للفاتورة #<span id="invRetInvoiceNumber"></span></h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="invRetInvoiceInfo" class="alert alert-info py-2 d-none"></div>
+        <div id="invRetItemsArea" class="d-none">
+          <label class="form-label fw-700 mt-2">الأصناف المرتجعة</label>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+              <thead>
+                <tr><th style="width:40px">اختر</th><th>الصنف</th><th>سعر البيع</th><th>الكمية المباعة</th><th>سبق إرجاعه</th><th>متاح</th><th>الكمية</th></tr>
+              </thead>
+              <tbody id="invRetItemsBody"></tbody>
+            </table>
+          </div>
+          <div class="mb-2 mt-2">
+            <label class="form-label">سبب الإرجاع</label>
+            <textarea class="form-control" id="invRetReason" rows="2" placeholder="اختياري"></textarea>
+          </div>
+          <div class="alert alert-warning py-2 d-flex justify-content-between">
+            <span>إجمالي المرتجع:</span>
+            <strong id="invRetTotal">0.00 ج</strong>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+        <button class="btn btn-danger" id="invRetConfirmBtn" onclick="invConfirmReturn()" style="display:none">
+          <i class="bi bi-check2 me-1"></i>تأكيد الإرجاع
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const invRetModal = new bootstrap.Modal(document.getElementById('invReturnModal'));
+let invRetInvoiceData = null;
+
+window.openInvoiceReturnModal = async function(invoiceId) {
+  const r = await fetch(`/api/returns/invoice/${invoiceId}`);
+  const res = await r.json();
+  if (!res.success) return toast(res.message, 'error');
+  invRetInvoiceData = res.data;
+  const { invoice, items } = res.data;
+
+  document.getElementById('invRetInvoiceNumber').textContent = invoiceId;
+  document.getElementById('invRetInvoiceInfo').classList.remove('d-none');
+  document.getElementById('invRetInvoiceInfo').innerHTML =
+    `<strong>فاتورة رقم:</strong> ${invoice.invoice_number} | <strong>العميل:</strong> ${invoice.customer_name || 'نقدي'} | <strong>الإجمالي:</strong> ${fmt(invoice.net_total)}`;
+
+  const tbody = document.getElementById('invRetItemsBody');
+  const hasAvail = items.some(it => it.available_to_return > 0);
+  tbody.innerHTML = items.map(it => `
+    <tr>
+      <td><input type="checkbox" class="form-check-input" onchange="invToggleRetItem(this)" ${it.available_to_return <= 0 ? 'disabled' : ''}></td>
+      <td>${it.product_name || '—'}</td>
+      <td>${fmt(it.unit_price)}</td>
+      <td>${it.quantity}</td>
+      <td>${it.already_returned || 0}</td>
+      <td>${it.available_to_return}</td>
+      <td><input type="number" class="form-control form-control-sm inv-ret-qty" data-id="${it.product_id}" data-price="${it.unit_price}" data-name="${it.product_name || '—'}" min="0" max="${it.available_to_return}" step="0.001" style="width:80px" disabled oninput="invCalcRetTotal()"></td>
+    </tr>`).join('');
+
+  document.getElementById('invRetItemsArea').classList.remove('d-none');
+  document.getElementById('invRetConfirmBtn').style.display = hasAvail ? '' : 'none';
+  invCalcRetTotal();
+  invRetModal.show();
+};
+
+function invToggleRetItem(cb) {
+  const row = cb.closest('tr');
+  const qtyInput = row.querySelector('.inv-ret-qty');
+  qtyInput.disabled = !cb.checked;
+  if (!cb.checked) qtyInput.value = '';
+  invCalcRetTotal();
+}
+
+function invCalcRetTotal() {
+  let total = 0;
+  document.querySelectorAll('.inv-ret-qty:not(:disabled)').forEach(inp => {
+    const qty = parseFloat(inp.value) || 0;
+    const price = parseFloat(inp.dataset.price) || 0;
+    if (qty > 0) total += qty * price;
+  });
+  document.getElementById('invRetTotal').textContent = fmt(total);
+}
+
+async function invConfirmReturn() {
+  if (!invRetInvoiceData) return toast('الرجاء تحميل بيانات الفاتورة أولاً', 'error');
+  const invoiceId = invRetInvoiceData.invoice.id;
+  const items = [];
+  document.querySelectorAll('.inv-ret-qty:not(:disabled)').forEach(inp => {
+    const qty = parseFloat(inp.value) || 0;
+    if (qty > 0) items.push({ product_id: parseInt(inp.dataset.id), product_name: inp.dataset.name, quantity: qty, unit_price: parseFloat(inp.dataset.price) });
+  });
+  if (!items.length) return toast('اختر أصناف وأدخل كميات', 'error');
+
+  const settingsR = await fetch('/api/settings');
+  const settingsData = await settingsR.json();
+  const returnPin = settingsData.data?.return_pin || '';
+  let pin = '';
+  if (returnPin) {
+    pin = await promptPin();
+    if (!pin) return;
+    const verifyR = await fetch('/api/returns/verify-pin', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin })
+    });
+    const verifyRes = await verifyR.json();
+    if (!verifyRes.success) return toast(verifyRes.message, 'error');
+  }
+
+  const r = await fetch('/api/returns', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ original_invoice_id: invoiceId, items, reason: document.getElementById('invRetReason').value.trim(), pin })
+  });
+  const res = await r.json();
+  if (res.success) { toast(res.message); invRetModal.hide(); }
+  else toast(res.message, 'error');
+}
+</script>
+
+<%- include('partials/foot') %>

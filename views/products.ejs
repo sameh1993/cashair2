@@ -1,235 +1,332 @@
-<%- include('partials/head', { title: "المنتجات | نظام الكاشير", useVue: true, extraHead: "" }) %>
-<body>
-<div id="app" class="app-layout" v-cloak>
+<%- include('partials/head', { title:'الأصناف', page:'products', user:user }) %>
 
-  <!-- Sidebar -->
-  <%- include('partials/sidebar', { activePage: 'products', logoSub: 'إدارة المنتجات' }) %>
-<!-- Main -->
-  <div class="main-content">
-    <%- include('partials/topbar', { content: `
-      <div class="topbar-title">📦 إدارة المنتجات</div>
-      <input type="text" class="form-control" style="width:220px;" placeholder="🔍 بحث..." v-model="search">
-      <button class="btn btn-primary" @click="openAdd">+ إضافة منتج</button>
-    ` }) %>
-    <div class="page-body">
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h5 class="mb-0 fw-800">الأصناف</h5>
+    <small class="text-muted">إدارة المنتجات والأسعار والمخزون</small>
+  </div>
+  <div class="d-flex gap-2">
+    <button class="btn btn-outline-primary" onclick="addCategory()"><i class="bi bi-tags me-1"></i> تصنيف جديد</button>
+    <button class="btn btn-primary" onclick="openModal()"><i class="bi bi-plus-lg me-1"></i> صنف جديد</button>
+  </div>
+</div>
 
-      <div class="card">
-        <div class="card-header">
-          <h5>قائمة المنتجات ({{ filteredProducts.length }})</h5>
-          <div style="display:flex;gap:8px;">
-            <select class="form-control" style="width:auto;" v-model="filterActive">
-              <option value="">الكل</option>
-              <option value="1">نشط</option>
-              <option value="0">محذوف</option>
-            </select>
-          </div>
-        </div>
-        <div class="table-wrapper">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>اسم المنتج</th>
-                <th>التصنيف</th>
-                <th>الباركود</th>
-                <th>السعر</th>
-                <th>المخزون</th>
-                <th>الوحدة</th>
-                <th>الحالة</th>
-                <th>إجراءات</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-if="loading">
-                <td colspan="9" class="text-center" style="padding:40px;">
-                  <span class="spinner" style="width:24px;height:24px;border-color:#e2e8f0;border-top-color:var(--primary);"></span>
-                </td>
-              </tr>
-              <tr v-else-if="!filteredProducts.length">
-                <td colspan="9" class="text-center" style="padding:40px;color:#94a3b8;">لا توجد منتجات</td>
-              </tr>
-              <tr v-for="p in filteredProducts" :key="p.id">
-                <td class="text-muted" style="font-size:12px;">{{ p.id }}</td>
-                <td class="fw-bold">{{ p.name }}</td>
-                <td class="text-muted">{{ p.category || 'عام' }}</td>
-                <td style="font-size:12px;direction:ltr;text-align:right;color:#64748b;">{{ p.barcode || '-' }}</td>
-                <td class="fw-bold" style="color:var(--primary);">{{ currency }} {{ parseFloat(p.price).toFixed(2) }}</td>
-                <td>
-                  <span :class="p.stock <= 0 ? 'badge badge-danger' : p.stock <= 5 ? 'badge badge-warning' : 'badge badge-success'">
-                    {{ p.stock }}
-                  </span>
-                </td>
-                <td class="text-muted">{{ p.unit }}</td>
-                <td>
-                  <span :class="p.active ? 'badge badge-success' : 'badge badge-gray'">
-                    {{ p.active ? 'نشط' : 'محذوف' }}
-                  </span>
-                </td>
-                <td>
-                  <div style="display:flex;gap:4px;">
-                    <button class="btn btn-sm btn-outline" @click="openEdit(p)" title="تعديل">✏️</button>
-                    <button class="btn btn-sm btn-danger" @click="deleteProduct(p)" title="حذف">🗑</button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+<!-- KPIs -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="kpi-card d-flex align-items-center gap-3">
+      <div class="kpi-icon kpi-blue"><i class="bi bi-box-seam"></i></div>
+      <div><div class="kpi-label">إجمالي الأصناف</div><div class="kpi-value" id="kpiTotal">—</div></div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="kpi-card d-flex align-items-center gap-3">
+      <div class="kpi-icon kpi-green"><i class="bi bi-check-circle"></i></div>
+      <div><div class="kpi-label">أصناف متاحة</div><div class="kpi-value" id="kpiAvail">—</div></div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="kpi-card d-flex align-items-center gap-3">
+      <div class="kpi-icon kpi-red"><i class="bi bi-exclamation-triangle"></i></div>
+      <div><div class="kpi-label">نفذ من المخزون</div><div class="kpi-value" id="kpiOut">—</div></div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="kpi-card d-flex align-items-center gap-3">
+      <div class="kpi-icon kpi-amber"><i class="bi bi-cash-stack"></i></div>
+      <div><div class="kpi-label">قيمة المخزون</div><div class="kpi-value" id="kpiValue">—</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Table -->
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <span><i class="bi bi-box-seam text-primary"></i> قائمة الأصناف</span>
+    <div class="d-flex gap-2">
+      <select class="form-select form-select-sm" style="width:140px" id="catFilter" onchange="load()">
+        <option value="">كل الفئات</option>
+      </select>
+      <div class="input-group input-group-sm" style="width:200px">
+        <input type="text" class="form-control" placeholder="بحث..." id="searchInput" oninput="debounceLoad()">
+        <span class="input-group-text"><i class="bi bi-search"></i></span>
       </div>
     </div>
   </div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th>#</th><th>الصنف</th><th>الباركود</th><th>الفئة</th>
+          <th>سعر التكلفة</th><th>سعر البيع</th><th>المخزون</th><th>الوحدة</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="tableBody">
+        <tr><td colspan="9" class="text-center text-muted py-4">جاري التحميل...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
 
-  <!-- Modal -->
-  <div class="modal-overlay" v-if="showModal" @click.self="showModal=false">
-    <div class="modal-box">
+<!-- Modal إضافة/تعديل -->
+<div class="modal fade" id="prodModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
       <div class="modal-header">
-        <h5>{{ editMode ? '✏️ تعديل المنتج' : '➕ إضافة منتج جديد' }}</h5>
-        <button class="btn-close" @click="showModal=false">✕</button>
+        <h6 class="modal-title" id="modalTitle">صنف جديد</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-          <div class="form-group" style="grid-column:1/-1;">
-            <label class="form-label">اسم المنتج *</label>
-            <input type="text" class="form-control" v-model="form.name" placeholder="مثال: مياه معدنية 500ml">
+        <input type="hidden" id="editId">
+        <div class="row g-3">
+          <div class="col-md-8">
+            <label class="form-label">اسم الصنف <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="fName">
           </div>
-          <div class="form-group">
-            <label class="form-label">التصنيف *</label>
-            <input type="text" class="form-control" v-model.trim="form.category" placeholder="مثال: مشروبات">
-          </div>
-          <div class="form-group">
-            <label class="form-label">الوحدة</label>
-            <input type="text" class="form-control" v-model="form.unit" placeholder="قطعة / كيلو / لتر">
-          </div>
-          <div class="form-group">
+          <div class="col-md-4">
             <label class="form-label">الباركود</label>
-            <input type="text" class="form-control" v-model="form.barcode" placeholder="اختياري" style="direction:ltr;">
+            <input type="text" class="form-control" id="fBarcode">
           </div>
-          <div class="form-group">
-            <label class="form-label">السعر *</label>
-            <input type="number" class="form-control" v-model.number="form.price" min="0" step="0.01" style="direction:ltr;">
+          <div class="col-md-4">
+            <label class="form-label">الفئة</label>
+            <input type="text" class="form-control" id="fCategory" list="catList">
+            <datalist id="catList"></datalist>
           </div>
-          <div class="form-group">
-            <label class="form-label">المخزون</label>
-            <input type="number" class="form-control" v-model.number="form.stock" min="0" step="0.001" style="direction:ltr;">
-            <div class="text-muted" style="font-size:11px;margin-top:4px;">
-              تعديل الرصيد من هنا ينفذ كتسوية على المخزن الرئيسي.
+          <div class="col-md-4">
+            <label class="form-label">سعر التكلفة</label>
+            <div class="input-group">
+              <input type="number" class="form-control" id="fCost" placeholder="0.00" step="0.01" min="0">
+              <span class="input-group-text">ج</span>
             </div>
           </div>
-          <div class="form-group" v-if="editMode" style="grid-column:1/-1;">
-            <label class="form-label">الحالة</label>
-            <select class="form-control" v-model="form.active">
-              <option :value="1">نشط</option>
-              <option :value="0">غير نشط</option>
+          <div class="col-md-4">
+            <label class="form-label">سعر البيع <span class="text-danger">*</span></label>
+            <div class="input-group">
+              <input type="number" class="form-control" id="fPrice" placeholder="0.00" step="0.01" min="0">
+              <span class="input-group-text">ج</span>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">الكمية الحالية</label>
+            <input type="number" class="form-control" id="fQty" placeholder="0" step="any">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">الحد الأدنى للتنبيه</label>
+            <input type="number" class="form-control" id="fMinQty" placeholder="5">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">الوحدة</label>
+            <select class="form-select" id="fUnit">
+              <option value="قطعة">قطعة</option>
+              <option value="كيلو">كيلو</option>
+              <option value="لتر">لتر</option>
+              <option value="متر">متر</option>
+              <option value="علبة">علبة</option>
+              <option value="كرتون">كرتون</option>
             </select>
           </div>
-        </div>
-        <div v-if="formError" style="background:#fee2e2;color:#b91c1c;border-radius:8px;padding:10px;margin-top:8px;font-size:13px;">
-          {{ formError }}
+          <div class="col-12">
+            <label class="form-label">وصف</label>
+            <textarea class="form-control" id="fDesc" rows="2"></textarea>
+          </div>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-outline" @click="showModal=false">إلغاء</button>
-        <button class="btn btn-primary" @click="saveProduct" :disabled="saving">
-          <span v-if="!saving">{{ editMode ? 'حفظ التعديلات' : 'إضافة' }}</span>
-          <span v-else class="spinner" style="width:14px;height:14px;border-width:2px;"></span>
-        </button>
+        <button class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+        <button class="btn btn-primary" onclick="save()"><i class="bi bi-check2 me-1"></i>حفظ</button>
       </div>
     </div>
   </div>
-
-  <div id="toast-container"></div>
 </div>
 
-<script src="/js/app.js"></script>
+<!-- Modal تعديل المخزون -->
+<div class="modal fade" id="stockModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:360px">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title">تعديل المخزون</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="stockProdId">
+        <div class="mb-3">
+          <label class="form-label fw-700" id="stockProdName"></label>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">نوع العملية</label>
+          <select class="form-select" id="stockOp">
+            <option value="add">إضافة (وارد)</option>
+            <option value="sub">خصم (صادر)</option>
+            <option value="set">تعيين (جرد)</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">الكمية <span class="text-danger">*</span></label>
+          <input type="number" class="form-control" id="stockQty" min="0" step="any">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+        <button class="btn btn-primary" onclick="saveStock()">تطبيق</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
-const { createApp, ref, computed, onMounted } = Vue;
+const prodModal  = new bootstrap.Modal(document.getElementById('prodModal'));
+const stockModal = new bootstrap.Modal(document.getElementById('stockModal'));
+let debTimer;
+let allCategories = [];
 
-createApp({
-  setup() {
-    const products = ref([]);
-    const loading  = ref(true);
-    const search   = ref('');
-    const filterActive = ref('1');
-    const currency = ref('ج.م');
+async function addCategory() {
+  const name = prompt('اكتب اسم التصنيف الجديد');
+  if (name === null) return;
+  const cleanName = name.trim();
+  if (!cleanName) return toast('اسم التصنيف مطلوب', 'error');
+  const result = await api('POST', '/api/products/categories', { name: cleanName });
+  if (!result.success) return toast(result.message, 'error');
+  toast(result.message);
+  await load();
+  document.getElementById('fCategory').value = cleanName;
+}
 
-    const showModal = ref(false);
-    const editMode  = ref(false);
-    const saving    = ref(false);
-    const formError = ref('');
-    const form = ref({ name:'', category:'عام', barcode:'', price:0, stock:0, unit:'قطعة', active:1 });
+async function load() {
+  const q   = document.getElementById('searchInput').value;
+  const cat = document.getElementById('catFilter').value;
+  const params = new URLSearchParams();
+  if (q)   params.set('q', q);
+  if (cat) params.set('category', cat);
 
-    const filteredProducts = computed(() => {
-      let list = products.value;
-      if (filterActive.value !== '') list = list.filter(p => String(p.active) === filterActive.value);
-      const q = search.value.trim().toLowerCase();
-      if (!q) return list;
-      return list.filter(p => p.name.toLowerCase().includes(q) || (p.barcode && p.barcode.includes(q)));
-    });
+  const r = await fetch('/api/products?' + params);
+  const res = await r.json();
+  const data = res.data || res.products || [];
 
-    async function loadProducts() {
-      loading.value = true;
-      const r = await fetch('/api/products/all');
-      const d = await r.json();
-      if (d.success) products.value = d.data;
-      loading.value = false;
-    }
+  // KPIs
+  document.getElementById('kpiTotal').textContent = data.length;
+  document.getElementById('kpiAvail').textContent = data.filter(p=>p.stock>0).length;
+  document.getElementById('kpiOut').textContent   = data.filter(p=>p.stock<=0).length;
+  const val = data.reduce((s,p)=>s+(parseFloat(p.cost_price||0)*parseFloat(p.stock||0)),0);
+  document.getElementById('kpiValue').textContent = fmt(val);
 
-    async function loadSettings() {
-      const r = await fetch('/api/settings');
-      const d = await r.json();
-      if (d.success) currency.value = d.data.currency || 'ج.م';
-    }
+  // Categories
+  const categoriesResponse = await fetch('/api/products/categories').then(r=>r.json());
+  allCategories = categoriesResponse.data || [...new Set(data.map(p=>p.category).filter(Boolean))];
+  const catSel = document.getElementById('catFilter');
+  const curVal = catSel.value;
+  catSel.innerHTML = '<option value="">كل الفئات</option>' +
+    allCategories.map(c=>`<option value="${c}" ${c===curVal?'selected':''}>${c}</option>`).join('');
+  const dl = document.getElementById('catList');
+  dl.innerHTML = allCategories.map(c=>`<option value="${c}">`).join('');
 
-    function openAdd() {
-      form.value = { name:'', category:'عام', barcode:'', price:0, stock:0, unit:'قطعة', active:1 };
-      editMode.value = false; formError.value = '';
-      showModal.value = true;
-    }
-
-    function openEdit(p) {
-      form.value = { ...p, category: p.category || 'عام' };
-      editMode.value = true; formError.value = '';
-      showModal.value = true;
-    }
-
-    async function saveProduct() {
-      if (!form.value.name.trim()) { formError.value = 'اسم المنتج مطلوب'; return; }
-      if (!String(form.value.category || '').trim()) { formError.value = 'التصنيف مطلوب'; return; }
-      if (form.value.price < 0)    { formError.value = 'السعر يجب أن يكون صفر أو أكثر'; return; }
-      saving.value = true; formError.value = '';
-      const url    = editMode.value ? `/api/products/${form.value.id}` : '/api/products';
-      const method = editMode.value ? 'PUT' : 'POST';
-      const r = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(form.value) });
-      const d = await r.json();
-      saving.value = false;
-      if (d.success) {
-        showToast(d.message, 'success');
-        showModal.value = false;
-        await loadProducts();
-      } else {
-        formError.value = d.message || 'حدث خطأ';
-      }
-    }
-
-    async function deleteProduct(p) {
-      if (!confirm(`حذف المنتج "${p.name}"؟`)) return;
-      const r = await fetch(`/api/products/${p.id}`, { method: 'DELETE' });
-      const d = await r.json();
-      if (d.success) { showToast('تم الحذف', 'success'); await loadProducts(); }
-      else showToast(d.message, 'error');
-    }
-
-    function doLogout() { if (confirm('تسجيل الخروج؟')) logout(); }
-
-    onMounted(() => { loadProducts(); loadSettings(); });
-
-    return {
-      products, loading, search, filterActive, currency, filteredProducts,
-      showModal, editMode, saving, formError, form,
-      openAdd, openEdit, saveProduct, deleteProduct, doLogout,
-    };
+  const tb = document.getElementById('tableBody');
+  if (!data.length) {
+    tb.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">لا توجد أصناف</td></tr>';
+    return;
   }
-}).mount('#app');
+  tb.innerHTML = data.map(p=>`
+    <tr>
+      <td class="text-muted">${p.id}</td>
+      <td><strong>${p.name}</strong>${p.description?`<br><small class="text-muted">${p.description}</small>`:''}</td>
+      <td class="text-muted small">${p.barcode||'—'}</td>
+      <td>${p.category?`<span class="badge badge-cash px-2">${p.category}</span>`:'—'}</td>
+      <td class="text-muted">${fmt(p.cost_price||0)}</td>
+      <td class="fw-700 text-primary">${fmt(p.price)}</td>
+      <td>
+        <span class="badge ${p.stock<=0?'bg-danger':p.stock<=(p.min_quantity||5)?'bg-warning text-dark':'badge-paid'} px-2">
+          ${p.stock} ${p.unit||'قطعة'}
+        </span>
+      </td>
+      <td class="text-muted small">${p.unit||'قطعة'}</td>
+      <td>
+        <button class="btn btn-sm btn-outline-secondary" onclick="openStock(${p.id},'${p.name.replace(/'/g,'')}')" title="تعديل مخزون">
+          <i class="bi bi-boxes"></i>
+        </button>
+        <button class="btn btn-sm btn-outline-primary ms-1" onclick="edit(${p.id})">
+          <i class="bi bi-pencil"></i>
+        </button>
+        <button class="btn btn-sm btn-outline-danger ms-1" onclick="del(${p.id},'${p.name.replace(/'/g,'')}')">
+          <i class="bi bi-trash"></i>
+        </button>
+      </td>
+    </tr>`).join('');
+}
+
+function debounceLoad() { clearTimeout(debTimer); debTimer=setTimeout(load,350); }
+
+function openModal() {
+  ['editId','fName','fBarcode','fCategory','fCost','fPrice','fQty','fMinQty','fDesc']
+    .forEach(id => document.getElementById(id).value='');
+  document.getElementById('fUnit').value='قطعة';
+  document.getElementById('modalTitle').textContent='صنف جديد';
+  prodModal.show();
+}
+
+async function edit(id) {
+  const r = await fetch(`/api/products/${id}`);
+  const res = await r.json();
+  const p = res.data || res.product || res;
+  document.getElementById('editId').value      = id;
+  document.getElementById('fName').value       = p.name;
+  document.getElementById('fBarcode').value    = p.barcode||'';
+  document.getElementById('fCategory').value   = p.category||'';
+  document.getElementById('fCost').value       = p.cost_price||0;
+  document.getElementById('fPrice').value      = p.price;
+  document.getElementById('fQty').value        = p.stock;
+  document.getElementById('fMinQty').value     = p.min_quantity||5;
+  document.getElementById('fUnit').value       = p.unit||'قطعة';
+  document.getElementById('fDesc').value       = p.description||'';
+  document.getElementById('modalTitle').textContent='تعديل الصنف';
+  prodModal.show();
+}
+
+async function save() {
+  const id   = document.getElementById('editId').value;
+  const body = {
+    name:        document.getElementById('fName').value.trim(),
+    barcode:     document.getElementById('fBarcode').value.trim(),
+    category:    document.getElementById('fCategory').value.trim(),
+    cost_price:  parseFloat(document.getElementById('fCost').value)||0,
+    price:       parseFloat(document.getElementById('fPrice').value)||0,
+    quantity:    parseFloat(document.getElementById('fQty').value)||0,
+    min_quantity:parseFloat(document.getElementById('fMinQty').value)||5,
+    unit:        document.getElementById('fUnit').value,
+    description: document.getElementById('fDesc').value.trim()
+  };
+  if (!body.name) return toast('الاسم مطلوب','error');
+  if (!body.price) return toast('سعر البيع مطلوب','error');
+
+  const r = await api(id?'PUT':'POST', id?`/api/products/${id}`:'/api/products', body);
+  if (r.success) { toast(r.message); prodModal.hide(); load(); }
+  else toast(r.message,'error');
+}
+
+function openStock(id, name) {
+  document.getElementById('stockProdId').value     = id;
+  document.getElementById('stockProdName').textContent = name;
+  document.getElementById('stockQty').value        = '';
+  stockModal.show();
+}
+
+async function saveStock() {
+  const id  = document.getElementById('stockProdId').value;
+  const op  = document.getElementById('stockOp').value;
+  const qty = parseFloat(document.getElementById('stockQty').value);
+  if (!qty && op!=='set') return toast('أدخل الكمية','error');
+
+  const r = await api('PUT', `/api/products/${id}/stock`, { operation: op, quantity: qty });
+  if (r.success) { toast(r.message); stockModal.hide(); load(); }
+  else toast(r.message,'error');
+}
+
+async function del(id, name) {
+  if (!confirm(`حذف الصنف "${name}"؟`)) return;
+  const r = await api('DELETE', `/api/products/${id}`);
+  if (r.success) { toast(r.message); load(); }
+  else toast(r.message,'error');
+}
+
+load();
 </script>
-</body>
-</html>
+
+<%- include('partials/foot') %>

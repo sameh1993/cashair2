@@ -21,9 +21,8 @@ let _settings = null;
 async function getSettings() {
   if (_settings) return _settings;
   try {
-    const r = await fetch('/api/settings');
-    const d = await r.json();
-    _settings = d.data || {};
+    const d = await api('GET', '/api/settings');
+    _settings = d?.data || {};
   } catch { _settings = {}; }
   return _settings;
 }
@@ -41,13 +40,14 @@ function formatMoneySync(amount, currency = 'ج.م', pos = 'after') {
   return pos === 'before' ? `${currency} ${val}` : `${val} ${currency}`;
 }
 
-// API helper
-async function api(url, opts = {}) {
+// API helper — same signature as foot.ejs api(method, url, body)
+async function api(method, url, body) {
   try {
     const res = await fetch(url, {
+      method,
       headers: { 'Content-Type': 'application/json' },
-      ...opts,
-      body: opts.body ? JSON.stringify(opts.body) : undefined,
+      credentials: 'same-origin',
+      body: body ? JSON.stringify(body) : undefined
     });
     if (res.status === 401) { window.location.href = '/'; return null; }
     return await res.json();
@@ -59,14 +59,14 @@ async function api(url, opts = {}) {
 
 // Get current user
 async function getCurrentUser() {
-  const r = await api('/api/auth/me');
+  const r = await api('GET', '/api/auth/me');
   if (!r?.success) { window.location.href = '/'; return null; }
   return r.user;
 }
 
 // Logout
 async function logout() {
-  await api('/api/auth/logout', { method: 'POST' });
+  await api('POST', '/api/auth/logout');
   window.location.href = '/';
 }
 
@@ -96,6 +96,24 @@ function setActiveNav(path) {
   });
 }
 
+function closeSidebar() {
+  document.querySelector('.sidebar')?.classList.remove('open');
+}
+
+function toggleSidebar() {
+  document.querySelector('.sidebar')?.classList.toggle('open');
+}
+
+// Currency formatter (used by many pages before foot.ejs loads)
+function fmt(n) {
+  return parseFloat(n||0).toLocaleString('ar-EG', { minimumFractionDigits:2, maximumFractionDigits:2 }) + ' ج';
+}
+
+function fmtDate(d) {
+  if (!d) return '—';
+  return new Date(d).toLocaleDateString('ar-EG');
+}
+
 // Init sidebar user info
 async function initSidebar() {
   const user = await getCurrentUser();
@@ -109,4 +127,15 @@ async function initSidebar() {
 
 document.addEventListener('DOMContentLoaded', () => {
   if (document.querySelector('.sidebar')) initSidebar();
+
+  document.addEventListener('click', (event) => {
+    const sidebar = document.querySelector('.sidebar');
+    if (!sidebar?.classList.contains('open')) return;
+    if (event.target.closest('.sidebar') || event.target.closest('.mobile-menu-btn')) return;
+    closeSidebar();
+  });
+
+  document.querySelectorAll('.sidebar .nav-item').forEach((link) => {
+    link.addEventListener('click', closeSidebar);
+  });
 });

@@ -1,0 +1,110 @@
+<%- include('partials/head', { title:'الموردون', page:'suppliers', user:user }) %>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h5 class="mb-0 fw-800">الموردون</h5>
+    <small class="text-muted">إدارة بيانات الموردين المرتبطين بحركات المخزون</small>
+  </div>
+  <% if (user && user.role === 'admin') { %>
+  <button class="btn btn-primary" onclick="openSupplierModal()"><i class="bi bi-plus-lg me-1"></i> مورد جديد</button>
+  <% } %>
+</div>
+
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <span><i class="bi bi-truck text-primary me-1"></i> قائمة الموردين</span>
+    <input class="form-control form-control-sm" style="max-width:260px" id="supplierSearch" placeholder="بحث بالاسم أو الهاتف" oninput="scheduleLoad()">
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead><tr><th>#</th><th>اسم المورد</th><th>الهاتف</th><th>العنوان</th><th>ملاحظات</th><th>تاريخ الإضافة</th><% if (user && user.role === 'admin') { %><th></th><% } %></tr></thead>
+      <tbody id="supplierRows"><tr><td colspan="7" class="text-center text-muted py-4">جارٍ التحميل...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="modal fade" id="supplierModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header"><h6 class="modal-title" id="supplierModalTitle">مورد جديد</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <input type="hidden" id="supplierId">
+        <div class="mb-3"><label class="form-label">اسم المورد <span class="text-danger">*</span></label><input class="form-control" id="supplierName"></div>
+        <div class="mb-3"><label class="form-label">الهاتف</label><input class="form-control" id="supplierPhone" type="tel"></div>
+        <div class="mb-3"><label class="form-label">العنوان</label><input class="form-control" id="supplierAddress"></div>
+        <div><label class="form-label">ملاحظات</label><textarea class="form-control" id="supplierNotes" rows="2"></textarea></div>
+      </div>
+      <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button><button class="btn btn-primary" onclick="saveSupplier()">حفظ</button></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const canManageSuppliers = <%= user && user.role === 'admin' ? 'true' : 'false' %>;
+const supplierModal = new bootstrap.Modal(document.getElementById('supplierModal'));
+let suppliers = [];
+let searchTimer;
+
+function escSupplier(value) {
+  return String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function scheduleLoad() { clearTimeout(searchTimer); searchTimer = setTimeout(loadSuppliers, 250); }
+
+async function loadSuppliers() {
+  const q = document.getElementById('supplierSearch').value.trim();
+  const response = await fetch(`/api/suppliers?q=${encodeURIComponent(q)}`);
+  const result = await response.json();
+  suppliers = result.data || [];
+  const rows = document.getElementById('supplierRows');
+  const colspan = canManageSuppliers ? 7 : 6;
+  if (!result.success || !suppliers.length) {
+    rows.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-muted py-4">${result.success ? 'لا يوجد موردون مسجلون' : escSupplier(result.message || 'تعذر تحميل الموردين')}</td></tr>`;
+    return;
+  }
+  rows.innerHTML = suppliers.map((supplier, i) => `<tr>
+    <td>${i + 1}</td><td class="fw-700">${escSupplier(supplier.name)}</td><td>${escSupplier(supplier.phone || '—')}</td>
+    <td>${escSupplier(supplier.address || '—')}</td><td>${escSupplier(supplier.notes || '—')}</td>
+    <td>${supplier.created_at ? new Date(supplier.created_at).toLocaleDateString('ar-EG') : '—'}</td>
+    ${canManageSuppliers ? `<td class="text-nowrap"><button class="btn btn-sm btn-outline-primary" onclick="editSupplier(${supplier.id})" title="تعديل"><i class="bi bi-pencil"></i></button><button class="btn btn-sm btn-outline-danger ms-1" onclick="deleteSupplier(${supplier.id})" title="حذف"><i class="bi bi-trash"></i></button></td>` : ''}
+  </tr>`).join('');
+}
+
+function openSupplierModal(supplier) {
+  document.getElementById('supplierId').value = supplier?.id || '';
+  document.getElementById('supplierName').value = supplier?.name || '';
+  document.getElementById('supplierPhone').value = supplier?.phone || '';
+  document.getElementById('supplierAddress').value = supplier?.address || '';
+  document.getElementById('supplierNotes').value = supplier?.notes || '';
+  document.getElementById('supplierModalTitle').textContent = supplier ? 'تعديل المورد' : 'مورد جديد';
+  supplierModal.show();
+}
+
+function editSupplier(id) { const supplier = suppliers.find(item => Number(item.id) === Number(id)); if (supplier) openSupplierModal(supplier); }
+
+async function saveSupplier() {
+  const id = document.getElementById('supplierId').value;
+  const body = {
+    name: document.getElementById('supplierName').value.trim(),
+    phone: document.getElementById('supplierPhone').value.trim(),
+    address: document.getElementById('supplierAddress').value.trim(),
+    notes: document.getElementById('supplierNotes').value.trim()
+  };
+  if (!body.name) return toast('اسم المورد مطلوب', 'error');
+  const result = await api(id ? 'PUT' : 'POST', id ? `/api/suppliers/${id}` : '/api/suppliers', body);
+  if (!result?.success) return toast(result?.message || 'تعذر حفظ المورد', 'error');
+  toast(result.message); supplierModal.hide(); await loadSuppliers();
+}
+
+async function deleteSupplier(id) {
+  const supplier = suppliers.find(item => Number(item.id) === Number(id));
+  if (!supplier || !confirm(`حذف المورد "${supplier.name}"؟`)) return;
+  const result = await api('DELETE', `/api/suppliers/${id}`);
+  if (!result?.success) return toast(result?.message || 'تعذر حذف المورد', 'error');
+  toast(result.message); await loadSuppliers();
+}
+
+loadSuppliers();
+</script>
+
+<%- include('partials/foot') %>

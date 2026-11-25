@@ -1,0 +1,324 @@
+<%- include('partials/head', { title:'المرتجعات', page:'returns', user:user }) %>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h5 class="mb-0 fw-800">المرتجعات</h5>
+    <small class="text-muted">استرجاع الأصناف بسعر الصرف الأصلي</small>
+  </div>
+  <button class="btn btn-primary" onclick="openReturnModal()">
+    <i class="bi bi-arrow-return-right me-1"></i> تسجيل مرتجع
+  </button>
+</div>
+
+<!-- KPIs -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="kpi-card d-flex align-items-center gap-3">
+      <div class="kpi-icon kpi-blue"><i class="bi bi-arrow-left-right"></i></div>
+      <div><div class="kpi-label">إجمالي المرتجعات</div><div class="kpi-value" id="kpiCount">—</div></div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="kpi-card d-flex align-items-center gap-3">
+      <div class="kpi-icon kpi-red"><i class="bi bi-cash"></i></div>
+      <div><div class="kpi-label">قيمة المرتجعات</div><div class="kpi-value" id="kpiValue">—</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Filters + Table -->
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <span><i class="bi bi-arrow-return-right text-primary"></i> سجل المرتجعات</span>
+    <div class="d-flex gap-2">
+      <input type="date" class="form-control form-control-sm" id="fromDate" onchange="loadReturns()">
+      <input type="date" class="form-control form-control-sm" id="toDate"   onchange="loadReturns()">
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr><th>#</th><th>فاتورة أصلية</th><th>العميل</th><th>قيمة المرتجع</th><th>السبب</th><th>التاريخ</th><th></th></tr>
+      </thead>
+      <tbody id="returnsBody">
+        <tr><td colspan="7" class="text-center text-muted py-4">جاري التحميل...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modal: تسجيل مرتجع -->
+<div class="modal fade" id="returnModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title"><i class="bi bi-arrow-return-right me-2"></i>تسجيل مرتجع</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <!-- Step 1: رقم الفاتورة -->
+        <div id="step1">
+          <div class="mb-3">
+            <label class="form-label">رقم الفاتورة الأصلية <span class="text-danger">*</span></label>
+            <div class="input-group">
+              <input type="number" class="form-control" id="retInvoiceId" placeholder="أدخل رقم الفاتورة">
+              <button class="btn btn-outline-primary" onclick="loadInvoiceItems()">
+                <i class="bi bi-search me-1"></i>بحث
+              </button>
+            </div>
+          </div>
+          <div id="invoiceInfo" style="display:none" class="alert alert-info py-2"></div>
+        </div>
+
+        <!-- Step 2: اختيار الأصناف -->
+        <div id="step2" style="display:none">
+          <div class="mb-3">
+            <label class="form-label fw-700">اختر الأصناف المرتجعة</label>
+            <div class="table-responsive">
+              <table class="table table-sm mb-0">
+                <thead>
+                  <tr><th>اختر</th><th>الصنف</th><th>سعر البيع</th><th>المتاح للإرجاع</th><th>الكمية المرتجعة</th></tr>
+                </thead>
+                <tbody id="itemsSelectBody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">سبب الإرجاع</label>
+            <textarea class="form-control" id="retReason" rows="2" placeholder="عيب، خطأ في الطلب..."></textarea>
+          </div>
+          <div class="alert alert-warning py-2 d-flex justify-content-between">
+            <span>إجمالي المرتجع:</span>
+            <strong id="retTotal">0.00 ج</strong>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+        <button class="btn btn-danger" id="confirmRetBtn" style="display:none" onclick="confirmReturn()">
+          <i class="bi bi-check2 me-1"></i>تأكيد الإرجاع
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: تفاصيل مرتجع -->
+<div class="modal fade" id="detailModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title">تفاصيل المرتجع</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="detailBody"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const returnModal = new bootstrap.Modal(document.getElementById('returnModal'));
+const detailModal = new bootstrap.Modal(document.getElementById('detailModal'));
+let currentInvoice = null;
+
+// Default dates (current month)
+const today = new Date();
+const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+document.getElementById('fromDate').value = firstDay.toISOString().split('T')[0];
+document.getElementById('toDate').value   = today.toISOString().split('T')[0];
+
+async function loadReturns() {
+  const from = document.getElementById('fromDate').value;
+  const to   = document.getElementById('toDate').value;
+  const r = await fetch(`/api/returns?from=${from}&to=${to}`);
+  const { data } = await r.json();
+
+  document.getElementById('kpiCount').textContent = data.length;
+  const total = data.reduce((s,r)=>s+parseFloat(r.total_refund||0),0);
+  document.getElementById('kpiValue').textContent = fmt(total);
+
+  const tb = document.getElementById('returnsBody');
+  if (!data.length) {
+    tb.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">لا توجد مرتجعات في هذه الفترة</td></tr>';
+    return;
+  }
+  tb.innerHTML = data.map(r=>`
+    <tr>
+      <td>${r.id}</td>
+      <td><a href="#" class="text-decoration-none fw-700" onclick="return false">#${r.original_invoice_id}</a></td>
+      <td>${r.customer_name||'—'}</td>
+      <td class="text-danger fw-700">${fmt(r.total_refund)}</td>
+      <td class="text-muted small">${r.reason||'—'}</td>
+      <td class="text-muted">${fmtDate(r.created_at)}</td>
+      <td>
+        <button class="btn btn-sm btn-outline-primary" onclick="showDetail(${r.id})">
+          <i class="bi bi-eye"></i>
+        </button>
+      </td>
+    </tr>`).join('');
+}
+
+function openReturnModal() {
+  document.getElementById('retInvoiceId').value = '';
+  document.getElementById('invoiceInfo').style.display = 'none';
+  document.getElementById('step2').style.display = 'none';
+  document.getElementById('confirmRetBtn').style.display = 'none';
+  document.getElementById('retReason').value = '';
+  currentInvoice = null;
+  returnModal.show();
+}
+
+async function loadInvoiceItems() {
+  const id = document.getElementById('retInvoiceId').value;
+  if (!id) return toast('أدخل رقم الفاتورة','error');
+
+  const r = await fetch(`/api/returns/invoice/${id}`);
+  const res = await r.json();
+  if (!res.success) return toast(res.message,'error');
+
+  currentInvoice = res.data;
+  const inv = res.data.invoice;
+
+  document.getElementById('invoiceInfo').innerHTML =
+    `<strong>فاتورة #${inv.id}</strong> — العميل: ${inv.customer_name||'عميل نقدي'} — 
+     الإجمالي: <strong>${fmt(inv.total)}</strong> — التاريخ: ${fmtDate(inv.created_at)}`;
+  document.getElementById('invoiceInfo').style.display = '';
+
+  const items = res.data.items;
+  document.getElementById('itemsSelectBody').innerHTML = items.map(it=>`
+    <tr id="itemRow-${it.product_id}">
+      <td>
+        <input type="checkbox" class="form-check-input ret-check"
+               data-id="${it.product_id}"
+               data-name="${it.product_name||it.name}"
+               data-price="${it.price||it.unit_price}"
+               data-max="${it.available_to_return}"
+               onchange="toggleReturnItem(this)">
+      </td>
+      <td>
+        <strong>${it.product_name||it.name}</strong>
+        ${it.already_returned>0?`<br><small class="text-danger">مُرتجع سابقاً: ${it.already_returned}</small>`:''}
+      </td>
+      <td>${fmt(it.price||it.unit_price)}</td>
+      <td>${it.available_to_return}</td>
+      <td>
+        <input type="number" class="form-control form-control-sm ret-qty" style="width:80px"
+               id="qty-${it.product_id}"
+               min="0.001" max="${it.available_to_return}" step="any"
+               value="${it.available_to_return}" disabled
+               oninput="calcRetTotal()">
+      </td>
+    </tr>`).join('');
+
+  document.getElementById('step2').style.display = '';
+  document.getElementById('confirmRetBtn').style.display = 'none';
+  calcRetTotal();
+}
+
+function toggleReturnItem(cb) {
+  const qtyInput = document.getElementById(`qty-${cb.dataset.id}`);
+  qtyInput.disabled = !cb.checked;
+  calcRetTotal();
+}
+
+function calcRetTotal() {
+  let total = 0;
+  let hasItem = false;
+  document.querySelectorAll('.ret-check:checked').forEach(cb=>{
+    const qty   = parseFloat(document.getElementById(`qty-${cb.dataset.id}`).value)||0;
+    const price = parseFloat(cb.dataset.price)||0;
+    total += qty * price;
+    hasItem = true;
+  });
+  document.getElementById('retTotal').textContent = fmt(total);
+  document.getElementById('confirmRetBtn').style.display = hasItem ? '' : 'none';
+}
+
+async function confirmReturn() {
+  const items = [];
+  document.querySelectorAll('.ret-check:checked').forEach(cb=>{
+    const qty = parseFloat(document.getElementById(`qty-${cb.dataset.id}`).value)||0;
+    if (qty>0) items.push({
+      product_id:   parseInt(cb.dataset.id),
+      product_name: cb.dataset.name,
+      quantity:     qty,
+      unit_price:   parseFloat(cb.dataset.price)
+    });
+  });
+  if (!items.length) return toast('اختر صنف واحد على الأقل','error');
+
+  const settingsR = await fetch('/api/settings');
+  const settingsData = await settingsR.json();
+  const returnPin = settingsData.data?.return_pin || '';
+  let pin = '';
+  if (returnPin) {
+    pin = await promptPin();
+    if (!pin) return;
+    const verifyR = await fetch('/api/returns/verify-pin', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin })
+    });
+    const verifyRes = await verifyR.json();
+    if (!verifyRes.success) return toast(verifyRes.message, 'error');
+  }
+
+  const body = {
+    original_invoice_id: currentInvoice.invoice.id,
+    items,
+    reason: document.getElementById('retReason').value,
+    pin
+  };
+
+  const r = await api('POST', '/api/returns', body);
+  if (r.success) {
+    toast(r.message);
+    returnModal.hide();
+    loadReturns();
+  } else toast(r.message,'error');
+}
+
+async function showDetail(id) {
+  document.getElementById('detailBody').innerHTML =
+    '<div class="text-center py-4"><div class="spinner-border text-primary"></div></div>';
+  detailModal.show();
+
+  const r = await fetch(`/api/returns/${id}`);
+  const { data } = await r.json();
+
+  document.getElementById('detailBody').innerHTML = `
+    <div class="mb-3">
+      <div class="d-flex justify-content-between mb-1">
+        <span class="text-muted">فاتورة أصلية</span>
+        <strong>#${data.original_invoice_id}</strong>
+      </div>
+      <div class="d-flex justify-content-between mb-1">
+        <span class="text-muted">العميل</span>
+        <strong>${data.customer_name}</strong>
+      </div>
+      <div class="d-flex justify-content-between mb-1">
+        <span class="text-muted">إجمالي المرتجع</span>
+        <strong class="text-danger">${fmt(data.total_refund)}</strong>
+      </div>
+      <div class="d-flex justify-content-between">
+        <span class="text-muted">السبب</span>
+        <span>${data.reason||'—'}</span>
+      </div>
+    </div>
+    <table class="table table-sm mb-0">
+      <thead><tr><th>الصنف</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th></tr></thead>
+      <tbody>
+        ${data.items.map(it=>`
+          <tr>
+            <td>${it.product_name}</td>
+            <td>${it.quantity}</td>
+            <td>${fmt(it.unit_price)}</td>
+            <td class="fw-700">${fmt(it.total)}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+loadReturns();
+</script>
+
+<%- include('partials/foot') %>

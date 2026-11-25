@@ -1,0 +1,129 @@
+<%- include('partials/head', { title:'حركات الصنف', page:'stock-movements', user:user }) %>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h5 class="mb-0 fw-800">حركات الصنف</h5>
+    <small class="text-muted">عرض كل حركات صنف معين (مشتريات، مبيعات، مرتجعات)</small>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-6">
+        <label class="form-label">اختر الصنف</label>
+        <select class="form-select" id="productSelect">
+          <option value="">-- اختر صنف --</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-primary w-100" onclick="loadMovements()"><i class="bi bi-search me-1"></i>عرض</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="resultArea" class="d-none">
+  <div class="row g-3 mb-4" id="statsCards"></div>
+
+  <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span><i class="bi bi-list-ul me-1"></i>سجل الحركات</span>
+      <span class="badge bg-secondary" id="movementsCount">0</span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-bordered table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>#</th>
+            <th>التاريخ</th>
+            <th>النوع</th>
+            <th>رقم المستند</th>
+            <th>المورد</th>
+            <th>الكمية</th>
+            <th>سعر الوحدة</th>
+            <th>الإجمالي</th>
+            <th>ملاحظات</th>
+          </tr>
+        </thead>
+        <tbody id="movementsBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+async function loadProducts() {
+  const r = await fetch('/api/products');
+  const res = await r.json();
+  const data = res.data || [];
+  const sel = document.getElementById('productSelect');
+  sel.innerHTML = '<option value="">-- اختر صنف --</option>' +
+    data.map(p => `<option value="${p.id}">${p.name} (${p.barcode || '-'}) — الرصيد: ${p.stock ?? 0}</option>`).join('');
+}
+
+async function loadMovements() {
+  const id = document.getElementById('productSelect').value;
+  if (!id) return toast('اختر صنفًا', 'error');
+  const r = await fetch(`/api/stock/movements/${id}`);
+  const res = await r.json();
+  if (!res.success) return toast(res.message, 'error');
+
+  const { product, movements, stats } = res.data;
+
+  document.getElementById('resultArea').classList.remove('d-none');
+
+  document.getElementById('statsCards').innerHTML = `
+    <div class="col-6 col-md-3">
+      <div class="card bg-success text-white text-center py-2">
+        <div class="fs-4 fw-bold">${stats.total_purchased}</div>
+        <small>إجمالي المشتريات</small>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card bg-danger text-white text-center py-2">
+        <div class="fs-4 fw-bold">${stats.total_sold}</div>
+        <small>إجمالي المبيعات</small>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card bg-warning text-dark text-center py-2">
+        <div class="fs-4 fw-bold">${stats.total_returned}</div>
+        <small>مرتجع لمورد</small>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card bg-info text-white text-center py-2">
+        <div class="fs-4 fw-bold">${stats.current_stock}</div>
+        <small>الرصيد الحالي</small>
+      </div>
+    </div>`;
+
+  const tbody = document.getElementById('movementsBody');
+  document.getElementById('movementsCount').textContent = movements.length;
+  if (!movements.length) {
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">لا توجد حركات</td></tr>';
+    return;
+  }
+  const typeMap = { purchase: 'إضافة', sale: 'بيع', return_to_supplier: 'مرتجع', adjustment: 'تسوية' };
+  const typeColor = { purchase: 'success', sale: 'primary', return_to_supplier: 'warning', adjustment: 'secondary' };
+  tbody.innerHTML = movements.map((m, i) => {
+    const qty = Number(m.quantity);
+    const isOut = m.type === 'sale' || m.type === 'return_to_supplier';
+    return `<tr>
+      <td>${i+1}</td>
+      <td class="small">${new Date(m.created_at).toLocaleString('ar-EG')}</td>
+      <td><span class="badge bg-${typeColor[m.type] || 'secondary'}">${typeMap[m.type] || m.type}</span></td>
+      <td class="ltr small">${m.document_number || '-'}</td>
+      <td>${m.supplier_name || '-'}</td>
+      <td class="${isOut ? 'text-danger' : 'text-success'} fw-bold">${isOut ? '-' : '+'}${qty}</td>
+      <td>${Number(m.unit_price).toFixed(2)}</td>
+      <td>${Number(m.total).toFixed(2)}</td>
+      <td class="small text-muted">${m.notes || '-'}</td>
+    </tr>`;
+  }).join('');
+}
+
+loadProducts();
+</script>
+<%- include('partials/foot') %>

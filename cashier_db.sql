@@ -22,6 +22,8 @@
 -- Database: `cashier_db`
 --
 
+create database is not exists cashier_db
+
 -- --------------------------------------------------------
 
 --

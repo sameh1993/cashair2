@@ -1,804 +1,1000 @@
-<%- include('partials/head', { title: "الكاشير | نظام البيع", useVue: true, extraHead: "<style>\n    body { overflow: hidden; }\n    .pos-topbar {\n      height: 50px; background: #1e293b;\n      display: flex; align-items: center;\n      padding: 0 14px; gap: 10px; flex-shrink: 0;\n    }\n    .pos-topbar .shop-name { color: #fff; font-weight: 700; font-size: 15px; flex: 1; }\n    .pos-topbar a {\n      color: #94a3b8; text-decoration: none;\n      padding: 6px 12px; border-radius: 8px;\n      font-size: 12.5px; font-weight: 600;\n      transition: all .2s;\n    }\n    .pos-topbar a:hover { background: rgba(255,255,255,.1); color: #fff; }\n    .pos-topbar .logout-btn {\n      color: #f87171; cursor: pointer;\n      padding: 6px 12px; border-radius: 8px;\n      font-size: 12.5px; font-weight: 600;\n      transition: all .2s; background: none; border: none;\n      font-family: 'Cairo', sans-serif;\n    }\n    .pos-topbar .logout-btn:hover { background: rgba(248,113,113,.15); }\n\n    .pos-wrapper { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }\n\n    /* Receipt hidden element for printing */\n    #receipt {\n      position: fixed;\n      top: 0;\n      left: -99999px;\n      width: 72mm;\n      background: #fff;\n      color: #111827;\n      padding: 0;\n      z-index: -1;\n    }\n\n    /* Payment modal big number */\n    .big-total {\n      font-size: 40px; font-weight: 800;\n      text-align: center; color: var(--primary);\n      padding: 10px 0; direction: ltr;\n    }\n    .numpad {\n      display: grid; grid-template-columns: repeat(3, 1fr);\n      gap: 8px; margin-top: 10px;\n    }\n    .num-btn {\n      padding: 14px; border-radius: 10px;\n      border: 1.5px solid #e2e8f0; background: #f8fafc;\n      font-size: 18px; font-weight: 700;\n      cursor: pointer; transition: all .15s;\n      font-family: 'Cairo', sans-serif;\n    }\n    .num-btn:hover { background: var(--primary); color: #fff; border-color: var(--primary); }\n    .num-btn.del-btn { background: #fee2e2; color: var(--danger); border-color: #fecaca; }\n    .num-btn.clear-btn { background: #fef3c7; color: var(--warning); border-color: #fde68a; }\n\n    .change-display {\n      background: #f0fdf4; border: 2px solid #86efac;\n      border-radius: 10px; padding: 10px 14px;\n      display: flex; justify-content: space-between;\n      align-items: center; margin-top: 10px;\n    }\n    .change-display .change-label { font-weight: 600; color: #15803d; }\n    .change-display .change-val { font-size: 22px; font-weight: 800; color: #15803d; direction: ltr; }\n\n    .payment-shortcuts {\n      display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px;\n    }\n    .shortcut-btn {\n      flex: 1; min-width: 80px;\n      padding: 8px; border-radius: 8px;\n      border: 1.5px solid #e2e8f0; background: #f8fafc;\n      font-family: 'Cairo', sans-serif; font-size: 13px; font-weight: 700;\n      cursor: pointer; text-align: center; transition: all .15s;\n    }\n    .shortcut-btn:hover { border-color: var(--primary); color: var(--primary); background: #eff6ff; }\n\n    .discount-row {\n      display: flex; align-items: center; gap: 8px; margin-bottom: 8px;\n    }\n\n    .scanner-modal { max-width: 520px; }\n    .scanner-view {\n      position: relative;\n      overflow: hidden;\n      border-radius: 12px;\n      background: #0f172a;\n      aspect-ratio: 4 / 3;\n      border: 2px solid #e2e8f0;\n    }\n    .scanner-view video {\n      width: 100%;\n      height: 100%;\n      object-fit: cover;\n      display: block;\n    }\n    .scanner-frame {\n      position: absolute;\n      inset: 18%;\n      border: 3px solid #22c55e;\n      border-radius: 12px;\n      box-shadow: 0 0 0 999px rgba(15, 23, 42, .38);\n      pointer-events: none;\n    }\n    .scanner-status {\n      margin-top: 10px;\n      padding: 9px 12px;\n      border-radius: 10px;\n      background: #f8fafc;\n      color: #475569;\n      font-size: 13px;\n      font-weight: 600;\n      text-align: center;\n    }\n  </style>" }) %>
-<body>
-<div id="app" v-cloak>
-  <%- include('partials/pos-navbar') %>
-<div class="pos-layout" style="flex:1;overflow:hidden;">
+<%- include('partials/head', { title:'نقطة البيع', page:'pos', user:user }) %>
 
-    <!-- ===== Products Panel ===== -->
+  <style>
+    /* POS layout overrides */
+    #main {
+      padding: 12px;
+    }
+
+    .pos-wrap {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 12px;
+      height: calc(100vh - var(--topbar-h) - 24px);
+    }
+
+    /* Left: Products */
+    .pos-products {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .prod-search-bar {
+      padding: 10px;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 10px;
+    }
+
+    .prod-grid {
+      /* flex:1; */
+      overflow-y: auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 8px;
+      padding: 2px;
+    }
+
+    .prod-card {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 8px;
+      cursor: pointer;
+      text-align: center;
+      transition: transform .12s, box-shadow .12s, border-color .12s;
+      user-select: none;
+    }
+
+    .prod-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, .1);
+      border-color: var(--primary);
+    }
+
+    .prod-card:active {
+      transform: scale(.97);
+    }
+
+    .prod-card .prod-name {
+      font-size: .8rem;
+      font-weight: 700;
+      line-height: 1.3;
+      margin-bottom: 4px;
+    }
+
+    .prod-card .prod-price {
+      font-size: .95rem;
+      font-weight: 800;
+      color: var(--primary);
+    }
+
+    .prod-card .prod-stock {
+      font-size: .7rem;
+      color: #9ca3af;
+      margin-top: 2px;
+    }
+
+    .prod-card.out-of-stock {
+      opacity: .45;
+      pointer-events: none;
+    }
+
+    /* Right: Cart */
+    .pos-cart {
+      display: flex;
+      flex-direction: column;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .cart-header {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      background: #f9fafb;
+    }
+
+    .cart-customer {
+      padding: 8px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .cart-items {
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .cart-item {
+      padding: 8px 14px;
+      border-bottom: 1px solid #f3f4f6;
+    }
+
+    .cart-item-top {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .cart-item-name {
+      flex: 1;
+      font-size: .83rem;
+      font-weight: 600;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .cart-item-del {
+      color: #dc2626;
+      cursor: pointer;
+      font-size: .9rem;
+      flex-shrink: 0;
+    }
+
+    .cart-item-fields {
+      display: flex;
+      gap: 8px;
+      margin-top: 6px;
+      padding-right: 4px;
+    }
+
+    .cart-field {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .cart-field label {
+      font-size: .65rem;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    .cart-field input {
+      width: 70px;
+      text-align: center;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: .82rem;
+      font-weight: 700;
+      padding: 4px 6px;
+      font-family: 'Cairo', sans-serif;
+    }
+
+    .cart-field input:focus {
+      border-color: var(--primary);
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(26, 107, 60, .15);
+    }
+
+    .cart-field .qty-wrap {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .cart-field .qty-wrap input {
+      width: 50px;
+    }
+
+    .qty-btn {
+      width: 26px;
+      height: 26px;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+      background: #fff;
+      font-size: .85rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--primary);
+      line-height: 1;
+    }
+
+    .qty-btn:hover {
+      background: var(--primary-light);
+    }
+
+    .cart-total-field {
+      font-size: .95rem;
+      font-weight: 800;
+      color: var(--primary);
+      padding-top: 14px;
+      min-width: 80px;
+      text-align: center;
+    }
+
+    .cart-empty {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #9ca3af;
+    }
+
+    .cart-totals {
+      padding: 10px 14px;
+      border-top: 1px solid var(--border);
+      background: #f9fafb;
+      font-size: .88rem;
+    }
+
+    .cart-totals .total-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 3px 0;
+    }
+
+    .cart-totals .grand-total {
+      font-size: 1.2rem;
+      font-weight: 800;
+      color: var(--primary);
+      border-top: 2px solid var(--border);
+      padding-top: 6px;
+      margin-top: 4px;
+    }
+
+    .cart-actions {
+      padding: 10px 14px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .discount-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .discount-row input {
+      flex: 1;
+    }
+
+    .pay-methods {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+
+    .pay-btn {
+      padding: 8px;
+      border-radius: 8px;
+      border: 2px solid var(--border);
+      background: #fff;
+      font-family: 'Cairo', sans-serif;
+      font-size: .82rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all .15s;
+      text-align: center;
+    }
+
+    .pay-btn.active {
+      border-color: var(--primary);
+      background: var(--primary-light);
+      color: var(--primary);
+    }
+
+    .btn-checkout {
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 12px;
+      font-family: 'Cairo', sans-serif;
+      font-size: 1rem;
+      font-weight: 800;
+      cursor: pointer;
+      transition: background .15s;
+      width: 100%;
+    }
+
+    .btn-checkout:hover {
+      background: #155a32;
+    }
+
+    .btn-checkout:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+
+    /* Receipt modal */
+    .receipt {
+      font-family: 'Cairo', sans-serif;
+      max-width: 340px;
+      margin: 0 auto;
+    }
+
+    .receipt-header {
+      text-align: center;
+      margin-bottom: 12px;
+    }
+
+    .receipt-divider {
+      border-top: 1px dashed #ccc;
+      margin: 8px 0;
+    }
+
+    .receipt-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: .85rem;
+      padding: 2px 0;
+    }
+
+    .receipt-total {
+      font-size: 1.1rem;
+      font-weight: 800;
+    }
+
+    .cat-chips {
+      padding: 0 2px;
+    }
+
+    .cat-chip {
+      padding: 4px 14px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: #fff;
+      font-size: .75rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .15s;
+      user-select: none;
+      font-family: 'Cairo', sans-serif;
+    }
+
+    .cat-chip:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    .cat-chip.active {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+
+    @media (max-width:900px) {
+      .pos-wrap {
+        grid-template-columns: 1fr;
+        grid-template-rows: 1fr auto;
+        height: auto;
+      }
+
+      .pos-products {
+        height: 55vh;
+      }
+    }
+  </style>
+
+  <div class="pos-wrap">
+
+    <!-- ══ LEFT: Products ══ -->
     <div class="pos-products">
-      <div class="pos-search-bar">
-        <input
-          type="text"
-          class="search-input"
-          placeholder="🔍  ابحث باسم المنتج أو امسح الباركود..."
-          v-model="searchQuery"
-          ref="searchInput"
-          @keyup.enter="handleSearchEnter"
-          autocomplete="off"
-          id="mainSearch"
-        />
-        <button class="btn btn-outline btn-sm" @click="clearSearch" v-if="searchQuery" title="مسح">✕</button>
-        <button class="btn btn-outline btn-sm" @click="openScanner" title="فتح الكاميرا">📷</button>
-        <button class="btn btn-outline btn-sm" @click="reloadProducts" title="تحديث">🔄</button>
-      </div>
-
-      <!-- Stats bar -->
-      <div style="display:flex;gap:10px;align-items:center;">
-        <span style="font-size:12.5px;color:#64748b;">{{ filteredProducts.length }} منتج</span>
-        <span v-if="todayStats.invoices_count" style="font-size:12px;color:#94a3b8;">
-          | اليوم: {{ todayStats.invoices_count }} فاتورة - {{ formatMoney(todayStats.total_sales) }}
-        </span>
-        <span style="flex:1"></span>
-        <button
-          v-if="!productsLoaded"
-          class="btn btn-sm btn-primary"
-          @click="loadProducts"
-        >
-          <span class="spinner" style="width:12px;height:12px;border-width:2px;"></span>
-          جاري التحميل...
-        </button>
-      </div>
-
-      <!-- Products grid -->
-      <div class="products-grid" v-if="filteredProducts.length">
-        <div
-          v-for="p in filteredProducts"
-          :key="p.id"
-          class="product-card"
-          :class="{ 'out-of-stock': settings.show_stock === '1' && p.stock <= 0 }"
-          @click="addToInvoice(p)"
-        >
-          <div class="p-name">{{ p.name }}</div>
-          <div class="p-price">{{ formatMoney(p.price) }}</div>
-          <div class="p-stock" v-if="settings.show_stock === '1'">
-            <span v-if="p.stock <= 0" style="color:#dc2626;">نفد</span>
-            <span v-else-if="p.stock <= 5" style="color:#d97706;">{{ p.stock }} {{ p.unit }}</span>
-            <span v-else style="color:#16a34a;">{{ p.stock }} {{ p.unit }}</span>
-          </div>
+      <div class="prod-search-bar">
+        <div class="input-group">
+          <span class="input-group-text"><i class="bi bi-upc-scan"></i></span>
+          <input type="text" class="form-control" id="prodSearch" placeholder="بحث باسم أو باركود..."
+            oninput="filterProducts()" autofocus>
         </div>
       </div>
-
-      <div class="empty-state" v-else-if="productsLoaded">
-        <div class="empty-icon">🔍</div>
-        <p v-if="searchQuery">لا توجد نتائج لـ "{{ searchQuery }}"</p>
-        <p v-else>لا توجد منتجات. <a href="/products">أضف منتجات</a></p>
-      </div>
-
-      <div class="empty-state" v-else>
-        <div class="spinner" style="width:32px;height:32px;margin:0 auto 12px;border-color:#e2e8f0;border-top-color:var(--primary);"></div>
-        <p>جاري تحميل المنتجات...</p>
+      <div class="cat-chips d-flex flex-wrap gap-1 px-1 mb-2" id="catChips"></div>
+      <div class="prod-grid" id="prodGrid">
+        <div class="text-center text-muted py-4" style="grid-column:1/-1">
+          <div class="spinner-border text-primary"></div>
+        </div>
       </div>
     </div>
 
-    <!-- ===== Invoice Panel ===== -->
-    <div class="pos-invoice">
-      <div class="invoice-header">
-        <div>
-          <h5>🧾 الفاتورة</h5>
-          <div style="font-size:11.5px;color:#94a3b8;margin-top:2px;">{{ cartItems.length }} صنف</div>
+    <!-- ══ RIGHT: Cart ══ -->
+    <div class="pos-cart">
+      <!-- Header -->
+      <div class="cart-header d-flex justify-content-between align-items-center">
+        <span class="fw-800"><i class="bi bi-cart3 text-primary me-1"></i>الفاتورة</span>
+        <div class="d-flex gap-1">
+          <button class="btn btn-sm btn-outline-warning" onclick="openReturnModal()" title="مرتجع">
+            <i class="bi bi-arrow-return-right"></i>
+          </button>
+          <button class="btn btn-sm btn-outline-danger" onclick="clearCart()">
+            <i class="bi bi-trash"></i> مسح
+          </button>
         </div>
-        <button class="btn btn-sm btn-danger" @click="clearCart" v-if="cartItems.length">
-          🗑 مسح
-        </button>
       </div>
 
-      <!-- Items list -->
-      <div class="invoice-items">
-        <div v-if="!cartItems.length" class="empty-state" style="padding:40px 20px;">
-          <div class="empty-icon">🛒</div>
-          <p>اختر منتجاً من القائمة</p>
-        </div>
+      <!-- Invoice info -->
+      <div class="cart-info" style="padding:6px 14px;border-bottom:1px solid var(--border);background:#fafcff;font-size:.78rem;display:flex;justify-content:space-between;align-items:center;">
+        <span><span class="text-muted">رقم:</span> <strong id="liveInvoiceNum" style="color:var(--primary);font-size:.85rem;">—</strong></span>
+        <span id="liveClock" style="color:var(--text-muted);font-weight:600;direction:ltr;text-align:left;"></span>
+      </div>
 
-        <div
-          v-for="(item, idx) in cartItems"
-          :key="item.product_id + '-' + idx"
-          class="invoice-item"
-        >
-          <div style="flex:1;min-width:0;">
-            <div class="item-name">{{ item.product_name }}</div>
-            <div class="item-price">{{ formatMoney(item.unit_price) }} × {{ item.quantity }}</div>
-          </div>
-          <div class="qty-ctrl">
-            <div class="qty-btn" @click="decreaseQty(idx)">−</div>
-            <div class="qty-display">{{ item.quantity }}</div>
-            <div class="qty-btn" @click="increaseQty(idx)">+</div>
-          </div>
-          <div class="item-subtotal">{{ formatMoney(item.unit_price * item.quantity) }}</div>
-          <div class="item-del" @click="removeItem(idx)" title="حذف">✕</div>
+      <!-- Customer -->
+      <div class="cart-customer">
+        <div class="d-flex gap-2 align-items-center">
+          <select class="form-select form-select-sm" id="cartCustomer" style="flex:1">
+            <option value="1">عميل نقدي</option>
+          </select>
+          <button class="btn btn-sm btn-outline-primary" onclick="openQuickCustomer()" title="عميل جديد">
+            <i class="bi bi-person-plus"></i>
+          </button>
         </div>
+      </div>
+
+      <!-- Items -->
+      <div id="cartItemsWrap" class="cart-items">
+        <div class="cart-empty" id="cartEmpty">
+          <i class="bi bi-cart3" style="font-size:3rem;opacity:.2"></i>
+          <div class="mt-2 small">اضغط على صنف للإضافة</div>
+        </div>
+        <div id="cartList"></div>
       </div>
 
       <!-- Totals -->
-      <div class="invoice-totals">
-        <div class="total-row">
-          <span>المجموع</span>
-          <span>{{ formatMoney(subtotal) }}</span>
-        </div>
-        <div class="total-row" v-if="discount > 0">
-          <span style="color:var(--danger);">خصم</span>
-          <span style="color:var(--danger);">- {{ formatMoney(discount) }}</span>
-        </div>
-        <div class="total-row grand">
-          <span>الإجمالي</span>
-          <span>{{ formatMoney(netTotal) }}</span>
-        </div>
+      <div class="cart-totals">
+        <div class="total-row"><span class="text-muted">الإجمالي</span><span id="subtotalDisp">0.00 ج</span></div>
+        <div class="total-row"><span class="text-muted">الخصم</span><span class="text-danger" id="discountDisp">-0.00
+            ج</span></div>
+        <div class="total-row grand-total"><span>الإجمالي النهائي</span><span id="grandTotal">0.00 ج</span></div>
       </div>
 
       <!-- Actions -->
-      <div class="invoice-actions">
-        <button
-          class="btn btn-success btn-block btn-lg"
-          @click="openPayment"
-          :disabled="!cartItems.length"
-          style="font-size:16px;font-weight:800;"
-        >
-          💰 إتمام البيع
-        </button>
-        <div style="display:flex;gap:6px;margin-top:8px;">
-          <button class="btn btn-outline btn-sm" style="flex:1;" @click="addDiscount">
-            🏷 خصم
-          </button>
-          <button class="btn btn-outline btn-sm" style="flex:1;" @click="focusSearch">
-            🔍 بحث
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== Payment Modal ===== -->
-  <div class="modal-overlay" v-if="showPayment" @click.self="showPayment=false">
-    <div class="modal-box" style="max-width:420px;">
-      <div class="modal-header">
-        <h5>💰 تفاصيل الدفع</h5>
-        <button class="btn-close" @click="showPayment=false">✕</button>
-      </div>
-      <div class="modal-body">
-        <div style="text-align:center;margin-bottom:12px;">
-          <div style="font-size:13px;color:#64748b;margin-bottom:4px;">المبلغ المطلوب</div>
-          <div class="big-total">{{ formatMoney(netTotal) }}</div>
-        </div>
-
+      <div class="cart-actions">
         <div class="discount-row">
-          <label style="font-size:13px;font-weight:600;flex-shrink:0;">خصم:</label>
-          <input type="number" class="form-control" v-model.number="discount" min="0" style="width:100px;direction:ltr;" @input="recalc">
-          <span style="font-size:13px;color:#64748b;">{{ settings.currency || 'ج.م' }}</span>
+          <input type="number" class="form-control form-control-sm" id="discountAmt" placeholder="خصم (جنيه)" min="0"
+            step="any" oninput="calcTotals()">
+          <input type="number" class="form-control form-control-sm" id="discountPct" placeholder="خصم ٪" min="0"
+            max="100" step="any" oninput="pctToAmt()" style="width:90px">
+        </div>
+        <div class="pay-methods">
+          <button class="pay-btn active" id="pay-cash" onclick="setPayMethod('cash')"> 💵 نقدي</button>
+          <button class="pay-btn" id="pay-visa" onclick="setPayMethod('visa')"> 💳 فيزا</button>
+          <button class="pay-btn" id="pay-instapay" onclick="setPayMethod('instapay')"> 📲 انستاباي</button>
         </div>
 
-        <div style="font-size:13px;font-weight:600;margin-bottom:6px;">المبلغ المدفوع:</div>
-        <div style="background:#f8fafc;border:2px solid #e2e8f0;border-radius:10px;padding:12px;font-size:28px;font-weight:800;text-align:center;direction:ltr;min-height:56px;letter-spacing:2px;margin-bottom:10px;">
-          {{ paidDisplay || '0' }}
-        </div>
 
-        <!-- Quick amounts -->
-        <div class="payment-shortcuts">
-          <button class="shortcut-btn" @click="setPaid(netTotal)">المبلغ بالكامل</button>
-          <button class="shortcut-btn" v-for="v in quickAmounts" :key="v" @click="setPaid(v)">
-            {{ formatMoney(v) }}
+        <button class="btn-checkout" id="checkoutBtn" onclick="checkout()" disabled>
+          <i class="bi bi-check-circle me-2"></i>إتمام البيع
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: إيصال -->
+  <div class="modal fade" id="receiptModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:380px">
+      <div class="modal-content">
+        <div class="modal-header" style="background:var(--primary-light); border-bottom:1px solid var(--border)">
+          <h6 class="modal-title text-primary fw-800"><i class="bi bi-receipt me-2"></i>الفاتورة</h6>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body p-3" id="receiptBody"></div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-secondary" data-bs-dismiss="modal" onclick="newSale()">
+            <i class="bi bi-plus me-1"></i>فاتورة جديدة
+          </button>
+          <button class="btn btn-primary" onclick="window.print()">
+            <i class="bi bi-printer me-1"></i>طباعة
           </button>
         </div>
-
-        <!-- Numpad -->
-        <div class="numpad" style="margin-top:10px;">
-          <button class="num-btn" v-for="n in ['7','8','9','4','5','6','1','2','3']" :key="n" @click="numpadPress(n)">{{ n }}</button>
-          <button class="num-btn clear-btn" @click="numpadPress('C')">C</button>
-          <button class="num-btn" @click="numpadPress('0')">0</button>
-          <button class="num-btn del-btn" @click="numpadPress('⌫')">⌫</button>
-        </div>
-
-        <!-- Change -->
-        <div class="change-display" v-if="paidAmount >= netTotal">
-          <span class="change-label">الباقي للعميل</span>
-          <span class="change-val">{{ formatMoney(change) }}</span>
-        </div>
-        <div v-else-if="paidAmount > 0 && paidAmount < netTotal"
-             style="background:#fff7ed;border:2px solid #fed7aa;border-radius:10px;padding:10px 14px;display:flex;justify-content:space-between;margin-top:10px;">
-          <span style="font-weight:600;color:#c2410c;">ناقص</span>
-          <span style="font-size:18px;font-weight:800;color:#c2410c;direction:ltr;">{{ formatMoney(netTotal - paidAmount) }}</span>
-        </div>
-
-        <!-- Payment method -->
-        <div style="margin-top:12px;">
-          <div style="font-size:13px;font-weight:600;margin-bottom:6px;">طريقة الدفع:</div>
-          <div style="display:flex;gap:8px;">
-            <button
-              v-for="m in [{v:'cash',l:'نقدي 💵'},{v:'card',l:'بطاقة 💳'},{v:'other',l:'أخرى'}]"
-              :key="m.v"
-              class="btn btn-sm"
-              :class="paymentMethod === m.v ? 'btn-primary' : 'btn-outline'"
-              @click="paymentMethod = m.v"
-            >{{ m.l }}</button>
-          </div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-outline" @click="showPayment=false">إلغاء</button>
-        <button
-          class="btn btn-success"
-          :disabled="paidAmount < netTotal || saving"
-          @click="completeSale"
-          style="min-width:120px;"
-        >
-          <span v-if="!saving">✅ إتمام البيع</span>
-          <span v-else class="spinner" style="width:16px;height:16px;border-width:2px;"></span>
-        </button>
       </div>
     </div>
   </div>
 
-  <!-- ===== Camera Scanner Modal ===== -->
-  <div class="modal-overlay" v-if="showScanner" @click.self="closeScanner">
-    <div class="modal-box scanner-modal">
+  <!-- Modal: عميل سريع -->
+  <div class="modal fade" id="quickCustomerModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:360px">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h6 class="modal-title">عميل جديد</h6>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">الاسم <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="qcName">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">التليفون</label>
+            <input type="tel" class="form-control" id="qcPhone">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">النوع</label>
+            <select class="form-select" id="qcType">
+              <option value="cash">نقدي</option>
+              <option value="credit">آجل</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+          <button class="btn btn-primary" onclick="saveQuickCustomer()">حفظ</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let _receiptModal, _quickCustModal;
+    function getReceiptModal() { if (!_receiptModal) _receiptModal = new bootstrap.Modal(document.getElementById('receiptModal')); return _receiptModal; }
+    function getQuickCustModal() { if (!_quickCustModal) _quickCustModal = new bootstrap.Modal(document.getElementById('quickCustomerModal')); return _quickCustModal; }
+
+    let allProducts = [];
+    let cart = [];   // [{product, qty, unit_price}]
+    let payMethod = 'cash';
+    let shopInfo = {};
+
+    // ── Init ──
+    async function init() {
+      const [prodRes, custRes, shopRes, categoriesRes] = await Promise.all([
+        fetch('/api/products?active=1', { credentials: 'same-origin' }).then(r => r.json()),
+        fetch('/api/customers', { credentials: 'same-origin' }).then(r => r.json()),
+        fetch('/api/settings/shop', { credentials: 'same-origin' }).then(r => r.json()),
+        fetch('/api/products/categories', { credentials: 'same-origin' }).then(r => r.json())
+      ]);
+      allProducts = prodRes.data || prodRes.products || [];
+      shopInfo = shopRes.data || {};
+
+      // Categories
+      renderCategories(categoriesRes?.data || []);
+      renderProducts(allProducts);
+
+      // Customers
+      const custSel = document.getElementById('cartCustomer');
+      (custRes?.data || []).filter(c => c.id > 1).forEach(c => {
+        const o = document.createElement('option'); o.value = c.id; o.textContent = c.name; custSel.appendChild(o);
+      });
+
+    }
+
+    // ── Products ──
+    function renderProducts(list) {
+      const grid = document.getElementById('prodGrid');
+      if (!list.length) {
+        grid.innerHTML = '<div class="text-center text-muted py-4" style="grid-column:1/-1">لا توجد أصناف</div>';
+        return;
+      }
+      grid.innerHTML = list.map(p => `
+    <div class="prod-card ${Number(p.stock) <= 0 ? 'out-of-stock' : ''}" onclick="addToCart(${p.id})">
+      <div class="prod-name">${p.name}</div>
+      <div class="prod-price">${fmt(p.price)}</div>
+      <div class="prod-stock">${Number(p.stock) <= 0 ? 'نفذ' : p.stock + ' متاح'}</div>
+    </div>`).join('');
+    }
+
+    function filterProducts() {
+      const q = document.getElementById('prodSearch').value.toLowerCase();
+      const cat = document.querySelector('#catChips .active')?.dataset?.cat || '';
+      let list = allProducts;
+      if (q) list = list.filter(p => p.name.toLowerCase().includes(q) || (p.barcode || '').includes(q));
+      if (cat) list = list.filter(p => p.category === cat);
+      renderProducts(list);
+    }
+
+    function renderCategories(categories) {
+      const cats = [...new Set(categories.filter(c => c && c !== 'عام'))];
+      const container = document.getElementById('catChips');
+      container.innerHTML = `<button class="cat-chip active" data-cat="" onclick="selectCategory(this)">الكل</button>`;
+      cats.forEach(c => {
+        const b = document.createElement('button');
+        b.className = 'cat-chip'; b.dataset.cat = c; b.textContent = c;
+        b.onclick = () => selectCategory(b);
+        container.appendChild(b);
+      });
+    }
+
+    function selectCategory(el) {
+      document.querySelectorAll('#catChips .cat-chip').forEach(b => b.classList.remove('active'));
+      el.classList.add('active');
+      filterProducts();
+    }
+
+    // ── Cart ──
+    function addToCart(id) {
+      const prod = allProducts.find(p => p.id === id);
+      if (!prod) return;
+      const existing = cart.find(i => i.product.id === id);
+      if (existing) {
+        if (existing.qty >= Number(prod.stock)) { toast('لا يوجد مخزون كافي', 'error'); return; }
+        existing.qty++;
+      } else {
+        cart.push({ product: prod, qty: 1, unit_price: Number(prod.price) });
+      }
+      renderCart();
+    }
+
+    function changeQty(id, delta) {
+      const item = cart.find(i => i.product.id === id);
+      if (!item) return;
+      item.qty = Math.max(0, item.qty + delta);
+      if (item.qty === 0) cart = cart.filter(i => i.product.id !== id);
+      renderCart();
+    }
+
+    function setQty(id, val) {
+      const item = cart.find(i => i.product.id === id);
+      if (!item) return;
+      const q = parseFloat(val) || 0;
+      if (q <= 0) { cart = cart.filter(i => i.product.id !== id); }
+      else { item.qty = Math.min(q, Number(item.product.stock)); }
+      renderCart();
+    }
+
+    function setUnitPrice(id, val) {
+      const item = cart.find(i => i.product.id === id);
+      if (!item) return;
+      const p = parseFloat(val) || 0;
+      item.unit_price = Math.max(0, p);
+      renderCart();
+    }
+
+    function removeFromCart(id) {
+      cart = cart.filter(i => i.product.id !== id);
+      renderCart();
+    }
+
+    function clearCart() {
+      cart = [];
+      document.getElementById('discountAmt').value = '';
+      document.getElementById('discountPct').value = '';
+      document.getElementById('cartCustomer').value = '1';
+      renderCart();
+    }
+
+    function renderCart() {
+      const empty = document.getElementById('cartEmpty');
+      const list = document.getElementById('cartList');
+      if (!cart.length) {
+        empty.style.display = 'flex';
+        list.innerHTML = '';
+        calcTotals();
+        return;
+      }
+      empty.style.display = 'none';
+      list.innerHTML = cart.map(item => `
+    <div class="cart-item">
+      <div class="cart-item-top">
+        <div class="cart-item-name" title="${item.product.name}">${item.product.name}</div>
+        <i class="bi bi-x-circle cart-item-del" onclick="removeFromCart(${item.product.id})"></i>
+      </div>
+      <div class="cart-item-fields">
+        <div class="cart-field">
+          <label>الكمية</label>
+          <div class="qty-wrap">
+            <button class="qty-btn" onclick="changeQty(${item.product.id},-1)">−</button>
+            <input type="number" value="${item.qty}" min="0.001" step="any"
+                   onchange="setQty(${item.product.id}, this.value)" onclick="this.select()">
+            <button class="qty-btn" onclick="changeQty(${item.product.id},1)">+</button>
+          </div>
+        </div>
+        <div class="cart-field">
+          <label>سعر الوحدة</label>
+          <input type="number" value="${item.unit_price}" min="0" step="any"
+                 onchange="setUnitPrice(${item.product.id}, this.value)" onclick="this.select()">
+        </div>
+        <div class="cart-total-field">${fmt(item.unit_price * item.qty)}</div>
+      </div>
+    </div>`).join('');
+      calcTotals();
+    }
+
+    function calcTotals() {
+      const subtotal = cart.reduce((s, i) => s + i.unit_price * i.qty, 0);
+      const discount = parseFloat(document.getElementById('discountAmt').value) || 0;
+      const grand = Math.max(0, subtotal - discount);
+
+      document.getElementById('subtotalDisp').textContent = fmt(subtotal);
+      document.getElementById('discountDisp').textContent = '-' + fmt(discount);
+      document.getElementById('grandTotal').textContent = fmt(grand);
+      document.getElementById('checkoutBtn').disabled = cart.length === 0;
+
+      calcInstPreview();
+    }
+
+    function pctToAmt() {
+      const pct = parseFloat(document.getElementById('discountPct').value) || 0;
+      const subtotal = cart.reduce((s, i) => s + i.unit_price * i.qty, 0);
+      document.getElementById('discountAmt').value = (subtotal * pct / 100).toFixed(2);
+      calcTotals();
+    }
+
+    function setPayMethod(m) {
+      payMethod = m;
+      document.querySelectorAll('.pay-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById(`pay-${m}`).classList.add('active');
+    }
+
+    // ── Checkout ──
+    async function checkout() {
+      if (!cart.length) return;
+      const btn = document.getElementById('checkoutBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>جاري الحفظ...';
+
+      const subtotal = cart.reduce((s, i) => s + i.unit_price * i.qty, 0);
+      const discount = parseFloat(document.getElementById('discountAmt').value) || 0;
+      const total = Math.max(0, subtotal - discount);
+      const customerId = parseInt(document.getElementById('cartCustomer').value) || 1;
+      const customerEl = document.getElementById('cartCustomer');
+      const customerName = customerEl.options[customerEl.selectedIndex]?.text || 'عميل نقدي';
+
+      const body = {
+        customer_id: customerId,
+        customer_name: customerName,
+        items: cart.map(i => ({ product_id: i.product.id, quantity: i.qty, unit_price: i.unit_price, product_name: i.product.name })),
+        discount: discount,
+        total,
+        payment_method: { cash:'cash', visa:'card', instapay:'other' }[payMethod] || 'cash'
+      };
+
+      try {
+        const r = await api('POST', '/api/invoices', body);
+        if (!r.success) { toast(r.message, 'error'); return; }
+
+        showReceipt(r.invoice_id || r.id, body, total, discount);
+      } catch (e) {
+        toast('خطأ في الاتصال', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-check-circle me-2"></i>إتمام البيع';
+      }
+    }
+
+    function showReceipt(invoiceId, body, total, discount) {
+      const date = new Date().toLocaleString('ar-EG');
+      document.getElementById('receiptBody').innerHTML = `
+    <div class="receipt">
+      <div class="receipt-header">
+        <div style="font-size:1.1rem;font-weight:800">${shopInfo.shop_name || 'نظام الكاشير'}</div>
+        ${shopInfo.address ? `<div style="font-size:.78rem;color:#666">${shopInfo.address}</div>` : ''}
+        ${shopInfo.phone ? `<div style="font-size:.78rem;color:#666">📞 ${shopInfo.phone}</div>` : ''}
+        <div class="receipt-divider"></div>
+        <div style="font-size:.8rem;color:#666">فاتورة رقم: <strong>#${invoiceId}</strong></div>
+        <div style="font-size:.78rem;color:#888">${date}</div>
+        <div style="font-size:.8rem">العميل: <strong>${body.customer_name}</strong></div>
+      </div>
+      <div class="receipt-divider"></div>
+      ${body.items.map(it => `
+        <div class="receipt-row">
+          <span>${it.product_name || it.name}</span>
+          <span>${it.quantity} × ${fmt(it.price)}</span>
+          <span>${fmt(it.quantity * it.price)}</span>
+        </div>`).join('')}
+      <div class="receipt-divider"></div>
+      ${discount > 0 ? `<div class="receipt-row"><span>خصم</span><span class="text-danger">-${fmt(discount)}</span></div>` : ''}
+      <div class="receipt-row receipt-total">
+        <span>الإجمالي</span>
+        <span style="color:var(--primary)">${fmt(total)}</span>
+      </div>
+      <div class="receipt-row"><span>طريقة الدفع</span><span>${{ cash: 'نقدي', card: 'فيزا', other: 'انستاباي' }[body.payment_method] || 'نقدي'}</span></div>
+      <div class="receipt-divider"></div>
+      <div style="text-align:center;font-size:.78rem;color:#888">${shopInfo.invoice_note || 'شكراً لتعاملكم معنا'}</div>
+    </div>`;
+      getReceiptModal().show();
+    }
+
+    function newSale() {
+      clearCart();
+      getReceiptModal().hide();
+      // Refresh product stock
+      init();
+    }
+
+    function openQuickCustomer() { getQuickCustModal().show(); }
+
+    async function saveQuickCustomer() {
+      const name = document.getElementById('qcName').value.trim();
+      const phone = document.getElementById('qcPhone').value.trim();
+      const type = document.getElementById('qcType').value;
+      if (!name) return toast('الاسم مطلوب', 'error');
+
+      const r = await api('POST', '/api/customers', { name, phone, customer_type: type });
+      if (r.success) {
+        const sel = document.getElementById('cartCustomer');
+        const opt = document.createElement('option');
+        opt.value = r.id; opt.textContent = name; opt.selected = true;
+        sel.appendChild(opt);
+        toast('تم إضافة العميل');
+        getQuickCustModal().hide();
+      } else toast(r.message, 'error');
+    }
+
+    // Barcode scanner (Enter key in search = direct add if one result)
+    document.getElementById('prodSearch').addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        const q = e.target.value.trim();
+        const found = allProducts.filter(p => (p.barcode || '') === q || p.name.toLowerCase() === q.toLowerCase());
+        if (found.length === 1) { addToCart(found[0].id); e.target.value = ''; filterProducts(); }
+      }
+    });
+
+    function updateClock() {
+      const now = new Date();
+      const dateStr = now.toLocaleDateString('ar-EG');
+      const timeStr = now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+      document.getElementById('liveClock').textContent = dateStr + ' ' + timeStr;
+    }
+
+    function generateTempInvoiceNum() {
+      const now = new Date();
+      const d = String(now.getDate()).padStart(2,'0');
+      const m = String(now.getMonth()+1).padStart(2,'0');
+      const h = String(now.getHours()).padStart(2,'0');
+      const min = String(now.getMinutes()).padStart(2,'0');
+      const s = String(now.getSeconds()).padStart(2,'0');
+      return `INV-${d}${m}${h}${min}${s}`;
+    }
+
+    // Update temp invoice number on cart change
+    const origRenderCart = renderCart;
+    renderCart = function() {
+      document.getElementById('liveInvoiceNum').textContent = cart.length ? generateTempInvoiceNum() : '—';
+      origRenderCart();
+    };
+
+    setInterval(updateClock, 1000);
+    updateClock();
+    init();
+  </script>
+
+<!-- Return Modal -->
+<div class="modal fade" id="posReturnModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
       <div class="modal-header">
-        <h5>📷 مسح الباركود</h5>
-        <button class="btn-close" @click="closeScanner">✕</button>
+        <h6 class="modal-title"><i class="bi bi-arrow-return-right text-warning me-1"></i>تسجيل مرتجع</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <div class="scanner-view">
-          <video ref="scannerVideo" autoplay playsinline muted></video>
-          <div class="scanner-frame"></div>
+        <div class="mb-3">
+          <label class="form-label">رقم الفاتورة الأصلية <span class="text-danger">*</span></label>
+          <div class="input-group">
+            <select class="form-select" id="retInvoiceSelect">
+              <option value="">-- اختر فاتورة --</option>
+            </select>
+            <button class="btn btn-outline-primary" onclick="loadReturnItems()"><i class="bi bi-search"></i> عرض</button>
+          </div>
         </div>
-        <div class="scanner-status">{{ scannerStatus }}</div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-outline" @click="closeScanner">إغلاق</button>
-        <button class="btn btn-primary" @click="startScanner" :disabled="scannerActive">
-          تشغيل الكاميرا
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== Receipt (for printing) ===== -->
-  <div id="receipt" class="thermal-print-root" v-if="lastInvoice">
-    <div class="receipt-shell">
-      <div class="receipt-brand-mark"></div>
-      <div class="receipt-header">
-        <h2>{{ settings.shop_name || 'المحل' }}</h2>
-        <p class="receipt-subtitle">فاتورة بيع نقدي</p>
-      </div>
-      <div class="receipt-meta-grid">
-        <div class="receipt-meta-row">
-          <span>رقم الفاتورة</span>
-          <strong>{{ lastInvoice.invoice_number }}</strong>
-        </div>
-        <div class="receipt-meta-row">
-          <span>التاريخ</span>
-          <strong>{{ receiptMeta.printed_at }}</strong>
-        </div>
-        <div class="receipt-meta-row">
-          <span>الكاشير</span>
-          <strong>{{ receiptMeta.cashier_name }}</strong>
-        </div>
-        <div class="receipt-meta-row">
-          <span>الدفع</span>
-          <strong>{{ paymentMethodLabel(receiptMeta.payment_method) }}</strong>
-        </div>
-      </div>
-      <hr class="receipt-divider">
-      <table class="receipt-table">
-        <thead>
-          <tr>
-            <th>الصنف</th>
-            <th>ك</th>
-            <th>سعر</th>
-            <th>إجمالي</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="(item, index) in cartItemsSnapshot" :key="item.product_id + '-' + index">
-            <td class="receipt-item-name">{{ item.product_name }}</td>
-            <td>{{ item.quantity }}</td>
-            <td>{{ formatMoney(item.unit_price) }}</td>
-            <td>{{ formatMoney(item.unit_price * item.quantity) }}</td>
-          </tr>
-        </tbody>
-      </table>
-      <hr class="receipt-divider">
-      <div class="receipt-summary">
-        <div class="receipt-summary-row">
-          <span>المجموع</span>
-          <strong>{{ formatMoney(receiptMeta.subtotal) }}</strong>
-        </div>
-        <div class="receipt-summary-row" v-if="receiptMeta.discount > 0">
-          <span>الخصم</span>
-          <strong>- {{ formatMoney(receiptMeta.discount) }}</strong>
-        </div>
-        <div class="receipt-summary-row receipt-summary-grand">
-          <span>الإجمالي النهائي</span>
-          <strong>{{ formatMoney(lastInvoice.net_total) }}</strong>
-        </div>
-        <div class="receipt-summary-row">
-          <span>المدفوع</span>
-          <strong>{{ formatMoney(receiptMeta.paid_amount) }}</strong>
-        </div>
-        <div v-if="lastInvoice.change_amount > 0" class="receipt-summary-row receipt-summary-change">
-          <span>الباقي</span>
-          <strong>{{ formatMoney(lastInvoice.change_amount) }}</strong>
-        </div>
-      </div>
-      <hr class="receipt-divider">
-      <div class="receipt-footer">{{ settings.receipt_footer || 'شكراً لزيارتكم' }}</div>
-      <div class="receipt-footer-note">نتشرف بخدمتكم مرة أخرى</div>
-    </div>
-  </div>
-
-  <!-- ===== Receipt Preview ===== -->
-  <div class="modal-overlay" v-if="showReceiptPreview" @click.self="showReceiptPreview=false">
-    <div class="modal-box receipt-preview-modal">
-      <div class="modal-header">
-        <h5>🧾 معاينة الفاتورة</h5>
-        <button class="btn-close" @click="showReceiptPreview=false">✕</button>
-      </div>
-      <div class="modal-body receipt-preview-body">
-        <div class="receipt-preview-sheet">
-          <div class="receipt-shell">
-            <div class="receipt-brand-mark"></div>
-            <div class="receipt-header">
-              <h2>{{ settings.shop_name || 'المحل' }}</h2>
-              <p class="receipt-subtitle">فاتورة بيع نقدي</p>
-            </div>
-            <div class="receipt-meta-grid">
-              <div class="receipt-meta-row">
-                <span>رقم الفاتورة</span>
-                <strong>{{ lastInvoice?.invoice_number }}</strong>
-              </div>
-              <div class="receipt-meta-row">
-                <span>التاريخ</span>
-                <strong>{{ receiptMeta.printed_at }}</strong>
-              </div>
-              <div class="receipt-meta-row">
-                <span>الكاشير</span>
-                <strong>{{ receiptMeta.cashier_name }}</strong>
-              </div>
-              <div class="receipt-meta-row">
-                <span>الدفع</span>
-                <strong>{{ paymentMethodLabel(receiptMeta.payment_method) }}</strong>
-              </div>
-            </div>
-            <hr class="receipt-divider">
-            <table class="receipt-table">
+        <div id="retInvoiceInfo" class="alert alert-info py-2 d-none"></div>
+        <div id="retItemsArea" class="d-none">
+          <label class="form-label fw-700 mt-2">الأصناف المرتجعة</label>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
               <thead>
-                <tr>
-                  <th>الصنف</th>
-                  <th>ك</th>
-                  <th>سعر</th>
-                  <th>إجمالي</th>
-                </tr>
+                <tr><th style="width:40px">اختر</th><th>الصنف</th><th>سعر البيع</th><th>الكمية المباعة</th><th>سبق إرجاعه</th><th>متاح</th><th>الكمية</th></tr>
               </thead>
-              <tbody>
-                <tr v-for="(item, index) in cartItemsSnapshot" :key="'preview-' + item.product_id + '-' + index">
-                  <td class="receipt-item-name">{{ item.product_name }}</td>
-                  <td>{{ item.quantity }}</td>
-                  <td>{{ formatMoney(item.unit_price) }}</td>
-                  <td>{{ formatMoney(item.unit_price * item.quantity) }}</td>
-                </tr>
-              </tbody>
+              <tbody id="retItemsBody"></tbody>
             </table>
-            <hr class="receipt-divider">
-            <div class="receipt-summary">
-              <div class="receipt-summary-row">
-                <span>المجموع</span>
-                <strong>{{ formatMoney(receiptMeta.subtotal) }}</strong>
-              </div>
-              <div class="receipt-summary-row" v-if="receiptMeta.discount > 0">
-                <span>الخصم</span>
-                <strong>- {{ formatMoney(receiptMeta.discount) }}</strong>
-              </div>
-              <div class="receipt-summary-row receipt-summary-grand">
-                <span>الإجمالي النهائي</span>
-                <strong>{{ formatMoney(lastInvoice?.net_total) }}</strong>
-              </div>
-              <div class="receipt-summary-row">
-                <span>المدفوع</span>
-                <strong>{{ formatMoney(receiptMeta.paid_amount) }}</strong>
-              </div>
-              <div v-if="lastInvoice?.change_amount > 0" class="receipt-summary-row receipt-summary-change">
-                <span>الباقي</span>
-                <strong>{{ formatMoney(lastInvoice.change_amount) }}</strong>
-              </div>
-            </div>
-            <hr class="receipt-divider">
-            <div class="receipt-footer">{{ settings.receipt_footer || 'شكراً لزيارتكم' }}</div>
-            <div class="receipt-footer-note">نتشرف بخدمتكم مرة أخرى</div>
+          </div>
+          <div class="mb-2 mt-2">
+            <label class="form-label">سبب الإرجاع</label>
+            <textarea class="form-control" id="retReason" rows="2" placeholder="اختياري"></textarea>
+          </div>
+          <div class="alert alert-warning py-2 d-flex justify-content-between">
+            <span>إجمالي المرتجع:</span>
+            <strong id="retTotal">0.00 ج</strong>
           </div>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-outline" @click="showReceiptPreview=false">إغلاق</button>
-        <button class="btn btn-primary" @click="printReceiptNow">🖨 طباعة</button>
+        <button class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+        <button class="btn btn-danger" id="retConfirmBtn" onclick="confirmReturn()" style="display:none">
+          <i class="bi bi-check2 me-1"></i>تأكيد الإرجاع
+        </button>
       </div>
     </div>
   </div>
-
-  <!-- Toast -->
-  <div id="toast-container"></div>
 </div>
 
-<script src="/js/app.js"></script>
 <script>
-const { createApp, ref, computed, onMounted, nextTick } = Vue;
+const retModal = new bootstrap.Modal(document.getElementById('posReturnModal'));
+let retInvoiceData = null;
 
-createApp({
-  setup() {
-    const settings       = ref({});
-    const allProducts    = ref([]);
-    const productsLoaded = ref(false);
-    const searchQuery    = ref('');
-    const cartItems      = ref([]);
-    const discount       = ref(0);
-    const searchInput    = ref(null);
-    const scannerVideo   = ref(null);
-    const todayStats     = ref({});
-    const currentUser    = ref(null);
-    const showScanner    = ref(false);
-    const scannerStatus  = ref('وجّه الكاميرا على الباركود');
-    const scannerActive  = ref(false);
-    let scannerStream = null;
-    let scannerDetector = null;
-    let scannerFrameId = null;
-    let scannerClosing = false;
+async function openReturnModal() {
+  // Load recent invoices into select
+  const r = await fetch('/api/invoices?limit=50');
+  const res = await r.json();
+  const invoices = res.data || [];
+  const sel = document.getElementById('retInvoiceSelect');
+  sel.innerHTML = '<option value="">-- اختر فاتورة --</option>' +
+    invoices.map(inv => `<option value="${inv.id}">#${inv.invoice_number} — ${fmt(inv.net_total)} (${new Date(inv.created_at).toLocaleDateString('ar-EG')})</option>`).join('');
+  document.getElementById('retItemsArea').classList.add('d-none');
+  document.getElementById('retInvoiceInfo').classList.add('d-none');
+  document.getElementById('retConfirmBtn').style.display = 'none';
+  document.getElementById('retTotal').textContent = '0.00 ج';
+  retModal.show();
+}
 
-    // Payment
-    const showPayment   = ref(false);
-    const paidDisplay   = ref('');
-    const paymentMethod = ref('cash');
-    const saving        = ref(false);
-    const lastInvoice   = ref(null);
-    const showReceiptPreview = ref(false);
-    const cartItemsSnapshot = ref([]);
-    const receiptMeta = ref({
-      subtotal: 0,
-      discount: 0,
-      paid_amount: 0,
-      payment_method: 'cash',
-      cashier_name: '',
-      printed_at: ''
+async function loadReturnItems() {
+  const id = document.getElementById('retInvoiceSelect').value;
+  if (!id) return toast('اختر فاتورة', 'error');
+  const r = await fetch(`/api/returns/invoice/${id}`);
+  const res = await r.json();
+  if (!res.success) return toast(res.message, 'error');
+  retInvoiceData = res.data;
+  const { invoice, items } = res.data;
+
+  document.getElementById('retInvoiceInfo').classList.remove('d-none');
+  document.getElementById('retInvoiceInfo').innerHTML = `<strong>فاتورة رقم:</strong> ${invoice.invoice_number} | <strong>العميل:</strong> ${invoice.customer_name || 'نقدي'} | <strong>الإجمالي:</strong> ${fmt(invoice.net_total)}`;
+
+  const tbody = document.getElementById('retItemsBody');
+  const hasAvail = items.some(it => it.available_to_return > 0);
+  tbody.innerHTML = items.map(it => `
+    <tr>
+      <td><input type="checkbox" class="form-check-input" onchange="toggleRetItem(this)" ${it.available_to_return <= 0 ? 'disabled' : ''}></td>
+      <td>${it.product_name || '—'}</td>
+      <td>${fmt(it.unit_price)}</td>
+      <td>${it.quantity}</td>
+      <td>${it.already_returned || 0}</td>
+      <td>${it.available_to_return}</td>
+      <td><input type="number" class="form-control form-control-sm ret-qty" data-id="${it.product_id}" data-price="${it.unit_price}" data-name="${it.product_name || '—'}" min="0" max="${it.available_to_return}" step="0.001" style="width:80px" disabled oninput="calcRetTotal()"></td>
+    </tr>`).join('');
+
+  document.getElementById('retItemsArea').classList.remove('d-none');
+  document.getElementById('retConfirmBtn').style.display = hasAvail ? '' : 'none';
+  calcRetTotal();
+}
+
+function toggleRetItem(cb) {
+  const row = cb.closest('tr');
+  const qtyInput = row.querySelector('.ret-qty');
+  qtyInput.disabled = !cb.checked;
+  if (!cb.checked) qtyInput.value = '';
+  calcRetTotal();
+}
+
+function calcRetTotal() {
+  let total = 0;
+  document.querySelectorAll('.ret-qty:not(:disabled)').forEach(inp => {
+    const qty = parseFloat(inp.value) || 0;
+    const price = parseFloat(inp.dataset.price) || 0;
+    if (qty > 0) total += qty * price;
+  });
+  document.getElementById('retTotal').textContent = fmt(total);
+}
+
+async function confirmReturn() {
+  const invoiceId = document.getElementById('retInvoiceSelect').value;
+  const items = [];
+  document.querySelectorAll('.ret-qty:not(:disabled)').forEach(inp => {
+    const qty = parseFloat(inp.value) || 0;
+    if (qty > 0) items.push({ product_id: parseInt(inp.dataset.id), product_name: inp.dataset.name, quantity: qty, unit_price: parseFloat(inp.dataset.price) });
+  });
+  if (!items.length) return toast('اختر أصناف وأدخل كميات', 'error');
+
+  const settingsR = await fetch('/api/settings');
+  const settingsData = await settingsR.json();
+  const returnPin = settingsData.data?.return_pin || '';
+  let pin = '';
+  if (returnPin) {
+    pin = await promptPin();
+    if (!pin) return;
+    const verifyR = await fetch('/api/returns/verify-pin', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin })
     });
-
-    // Computed
-    const subtotal = computed(() =>
-      cartItems.value.reduce((s, i) => s + i.unit_price * i.quantity, 0)
-    );
-    const netTotal = computed(() => Math.max(0, subtotal.value - (discount.value || 0)));
-    const paidAmount = computed(() => {
-      const v = parseFloat(paidDisplay.value);
-      return isNaN(v) ? 0 : v;
-    });
-    const change = computed(() => Math.max(0, paidAmount.value - netTotal.value));
-    const quickAmounts = computed(() => {
-      const t = netTotal.value;
-      const candidates = [50, 100, 200, 500].filter(v => v >= t);
-      return candidates.slice(0, 3);
-    });
-
-    const filteredProducts = computed(() => {
-      const q = searchQuery.value.trim().toLowerCase();
-      if (!q) return allProducts.value;
-      return allProducts.value.filter(p =>
-        p.name.toLowerCase().includes(q) || (p.barcode && p.barcode.includes(q))
-      );
-    });
-
-    function formatMoney(amount) {
-      const cur = settings.value.currency || 'ج.م';
-      const pos = settings.value.currency_position || 'after';
-      const val = parseFloat(amount || 0).toFixed(2);
-      return pos === 'before' ? `${cur} ${val}` : `${val} ${cur}`;
-    }
-
-    async function loadSettings() {
-      const r = await fetch('/api/settings');
-      const d = await r.json();
-      if (d.success) settings.value = d.data;
-    }
-
-    async function loadProducts() {
-      productsLoaded.value = false;
-      const r = await fetch('/api/products');
-      const d = await r.json();
-      if (d.success) {
-        allProducts.value = d.data;
-        productsLoaded.value = true;
-        // cache in localStorage for offline
-        try { localStorage.setItem('pos_products', JSON.stringify(d.data)); } catch {}
-      } else {
-        // try cache
-        try {
-          const cached = localStorage.getItem('pos_products');
-          if (cached) { allProducts.value = JSON.parse(cached); productsLoaded.value = true; }
-        } catch {}
-      }
-    }
-
-    async function loadTodayStats() {
-      const r = await fetch('/api/invoices/stats/today');
-      const d = await r.json();
-      if (d.success) todayStats.value = d.data;
-    }
-
-    function reloadProducts() { loadProducts(); loadTodayStats(); }
-
-    function addToInvoice(product) {
-      const existing = cartItems.value.find(i => i.product_id === product.id);
-      if (existing) {
-        existing.quantity++;
-      } else {
-        cartItems.value.push({
-          product_id:   product.id,
-          product_name: product.name,
-          barcode:      product.barcode,
-          unit:         product.unit,
-          unit_price:   parseFloat(product.price),
-          quantity:     1,
-        });
-      }
-      // clear search after adding
-      searchQuery.value = '';
-      focusSearch();
-    }
-
-    function removeItem(idx) { cartItems.value.splice(idx, 1); }
-    function increaseQty(idx) { cartItems.value[idx].quantity++; }
-    function decreaseQty(idx) {
-      if (cartItems.value[idx].quantity > 1) cartItems.value[idx].quantity--;
-      else removeItem(idx);
-    }
-    function clearCart() {
-      if (!cartItems.value.length) return;
-      if (confirm('مسح الفاتورة الحالية؟')) {
-        cartItems.value = [];
-        discount.value = 0;
-      }
-    }
-
-    function focusSearch() {
-      nextTick(() => searchInput.value?.focus());
-    }
-
-    function handleSearchEnter() {
-      if (filteredProducts.value.length === 1) {
-        addToInvoice(filteredProducts.value[0]);
-      }
-    }
-
-    function findProductByBarcode(code) {
-      const normalized = String(code || '').trim();
-      if (!normalized) return null;
-      return allProducts.value.find(p => String(p.barcode || '').trim() === normalized);
-    }
-
-    function handleScannedCode(code) {
-      const normalized = String(code || '').trim();
-      if (!normalized) return;
-
-      const product = findProductByBarcode(normalized);
-      if (product) {
-        addToInvoice(product);
-        showToast(`تمت إضافة: ${product.name}`, 'success');
-        closeScanner();
-        return;
-      }
-
-      searchQuery.value = normalized;
-      scannerStatus.value = `لم يتم العثور على منتج بالباركود: ${normalized}`;
-      showToast('لم يتم العثور على منتج بهذا الباركود', 'error');
-      closeScanner();
-    }
-
-    async function openScanner() {
-      showScanner.value = true;
-      scannerStatus.value = 'جاري فتح الكاميرا...';
-      scannerClosing = false;
-      await nextTick();
-      startScanner();
-    }
-
-    async function startScanner() {
-      if (scannerActive.value) return;
-
-      if (!('BarcodeDetector' in window)) {
-        scannerStatus.value = 'المتصفح لا يدعم قراءة الباركود بالكاميرا. جرّب Chrome أو Edge.';
-        return;
-      }
-
-      if (!navigator.mediaDevices?.getUserMedia) {
-        scannerStatus.value = 'الكاميرا غير متاحة في هذا المتصفح.';
-        return;
-      }
-
-      try {
-        const preferredFormats = ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'qr_code'];
-        const supportedFormats = BarcodeDetector.getSupportedFormats
-          ? await BarcodeDetector.getSupportedFormats()
-          : preferredFormats;
-        const formats = preferredFormats.filter(format => supportedFormats.includes(format));
-        const detectorOptions = formats.length ? { formats } : undefined;
-        scannerDetector = new BarcodeDetector(detectorOptions);
-        scannerStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' } },
-          audio: false
-        });
-        scannerVideo.value.srcObject = scannerStream;
-        await scannerVideo.value.play();
-        scannerActive.value = true;
-        scannerStatus.value = 'وجّه الكاميرا على الباركود';
-        scanCameraFrame();
-      } catch (error) {
-        console.error(error);
-        scannerStatus.value = 'تعذر فتح الكاميرا. تأكد من السماح باستخدام الكاميرا.';
-        scannerActive.value = false;
-      }
-    }
-
-    async function scanCameraFrame() {
-      if (!scannerActive.value || scannerClosing || !scannerDetector || !scannerVideo.value) return;
-
-      try {
-        if (scannerVideo.value.readyState >= 2) {
-          const codes = await scannerDetector.detect(scannerVideo.value);
-          if (codes.length) {
-            handleScannedCode(codes[0].rawValue);
-            return;
-          }
-        }
-      } catch (error) {
-        console.error(error);
-      }
-
-      scannerFrameId = requestAnimationFrame(scanCameraFrame);
-    }
-
-    function closeScanner() {
-      scannerClosing = true;
-      showScanner.value = false;
-      scannerActive.value = false;
-      if (scannerFrameId) {
-        cancelAnimationFrame(scannerFrameId);
-        scannerFrameId = null;
-      }
-      if (scannerStream) {
-        scannerStream.getTracks().forEach(track => track.stop());
-        scannerStream = null;
-      }
-      if (scannerVideo.value) scannerVideo.value.srcObject = null;
-      scannerStatus.value = 'وجّه الكاميرا على الباركود';
-      focusSearch();
-    }
-
-    function clearSearch() { searchQuery.value = ''; focusSearch(); }
-
-    function addDiscount() {
-      const val = prompt('أدخل قيمة الخصم:', discount.value || 0);
-      if (val !== null && !isNaN(parseFloat(val))) {
-        discount.value = Math.max(0, parseFloat(val));
-      }
-    }
-
-    function openPayment() {
-      if (!cartItems.value.length) return;
-      setPaid(netTotal.value);
-      paymentMethod.value = 'cash';
-      showPayment.value = true;
-    }
-
-    function numpadPress(key) {
-      if (key === 'C') { paidDisplay.value = ''; return; }
-      if (key === '⌫') { paidDisplay.value = paidDisplay.value.slice(0, -1); return; }
-      if (key === '.' && paidDisplay.value.includes('.')) return;
-      if (paidDisplay.value.length >= 10) return;
-      paidDisplay.value += key;
-    }
-
-    function setPaid(amount) {
-      paidDisplay.value = parseFloat(amount).toFixed(2).replace(/\.00$/, '');
-    }
-
-    function recalc() {
-      setPaid(netTotal.value);
-    }
-
-    function paymentMethodLabel(method) {
-      if (method === 'card') return 'بطاقة';
-      if (method === 'other') return 'أخرى';
-      return 'نقدي';
-    }
-
-    function printReceiptNow() {
-      showReceiptPreview.value = false;
-      setTimeout(() => window.print(), 150);
-    }
-
-    async function readApiResponse(response) {
-      const text = await response.text();
-      try {
-        return text ? JSON.parse(text) : {};
-      } catch {
-        return {
-          success: false,
-          message: response.ok
-            ? 'تعذر قراءة رد الخادم'
-            : `خطأ من الخادم (${response.status})`
-        };
-      }
-    }
-
-    async function completeSale() {
-      if (saving.value) return;
-      saving.value = true;
-      try {
-        const receiptItems = [...cartItems.value];
-        const receiptData = {
-          subtotal: subtotal.value,
-          discount: discount.value || 0,
-          paid_amount: Math.max(netTotal.value, paidAmount.value),
-          payment_method: paymentMethod.value,
-          cashier_name: (currentUser.value && (currentUser.value.full_name || currentUser.value.username)) || 'الكاشير',
-          printed_at: new Date().toLocaleString('ar-EG')
-        };
-        const payload = {
-          items: cartItems.value,
-          discount: discount.value || 0,
-          paid_amount: Math.max(netTotal.value, paidAmount.value),
-          payment_method: paymentMethod.value,
-        };
-        const r = await fetch('/api/invoices', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        const d = await readApiResponse(r);
-        if (d.success) {
-          lastInvoice.value = d.invoice;
-          cartItemsSnapshot.value = receiptItems;
-          receiptMeta.value = receiptData;
-          showPayment.value = false;
-          showReceiptPreview.value = true;
-          showToast(`✅ تم البيع بنجاح! الباقي: ${formatMoney(d.invoice.change_amount)}`, 'success');
-
-          // reset
-          cartItems.value = [];
-          discount.value = 0;
-          paidDisplay.value = '';
-          loadTodayStats().catch(console.error);
-          loadProducts().catch(console.error);
-          focusSearch();
-        } else {
-          showToast(d.message || (r.status === 401 ? 'انتهت الجلسة - سجل الدخول مرة أخرى' : 'حدث خطأ'), 'error');
-        }
-      } catch (error) {
-        console.error(error);
-        showToast('خطأ في الاتصال بالخادم', 'error');
-      } finally {
-        saving.value = false;
-      }
-    }
-
-    function doLogout() {
-      if (confirm('تسجيل الخروج؟')) logout();
-    }
-
-    onMounted(async () => {
-      currentUser.value = await getCurrentUser();
-      await loadSettings();
-      await loadProducts();
-      await loadTodayStats();
-      focusSearch();
-    });
-
-    return {
-      settings, allProducts, productsLoaded, searchQuery, searchInput,
-      scannerVideo, showScanner, scannerStatus, scannerActive,
-      cartItems, discount, todayStats,
-      showPayment, paidDisplay, paymentMethod, saving, lastInvoice, showReceiptPreview, cartItemsSnapshot, receiptMeta,
-      subtotal, netTotal, paidAmount, change, quickAmounts, filteredProducts,
-      formatMoney, loadProducts, reloadProducts, addToInvoice, removeItem,
-      increaseQty, decreaseQty, clearCart, focusSearch, handleSearchEnter, clearSearch,
-      openScanner, startScanner, closeScanner,
-      addDiscount, openPayment, numpadPress, setPaid, recalc, paymentMethodLabel, printReceiptNow, completeSale, doLogout,
-    };
+    const verifyRes = await verifyR.json();
+    if (!verifyRes.success) return toast(verifyRes.message, 'error');
   }
-}).mount('#app');
+
+  const r = await fetch('/api/returns', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ original_invoice_id: parseInt(invoiceId), items, reason: document.getElementById('retReason').value.trim(), pin })
+  });
+  const res = await r.json();
+  if (res.success) { toast(res.message); retModal.hide(); loadProducts(); }
+  else toast(res.message, 'error');
+}
 </script>
-</body>
-</html>
+
+  <%- include('partials/foot') %>

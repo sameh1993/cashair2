@@ -1,11 +1,7 @@
 const express = require('express');
 const db = require('../config/db');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
-const {
-  createStockDocument,
-  getPrimaryWarehouse,
-  roundQty
-} = require('../services/inventory');
+const { roundQty } = require('../services/inventory');
 
 const router = express.Router();
 
@@ -15,7 +11,10 @@ function normalizeProductPayload(body = {}) {
   const category = String(body.category || '').trim() || 'عام';
   const unit = String(body.unit || '').trim() || 'قطعة';
   const price = Number(body.price);
-  const stock = roundQty(body.stock ?? 0);
+  const stock = roundQty(body.stock ?? body.quantity ?? 0);
+  const cost_price = Number(body.cost_price ?? 0);
+  const min_quantity = Number(body.min_quantity ?? 5);
+  const description = String(body.description || '').trim() || null;
   const active = body.active === undefined ? 1 : Number(body.active) ? 1 : 0;
 
   if (!name) {
@@ -30,6 +29,14 @@ function normalizeProductPayload(body = {}) {
     return { error: 'المخزون غير صالح' };
   }
 
+  if (!Number.isFinite(cost_price) || cost_price < 0) {
+    return { error: 'سعر التكلفة غير صالح' };
+  }
+
+  if (!Number.isFinite(min_quantity) || min_quantity < 0) {
+    return { error: 'الحد الأدنى للتنبيه غير صالح' };
+  }
+
   return {
     data: {
       name,
@@ -37,10 +44,21 @@ function normalizeProductPayload(body = {}) {
       category,
       price,
       stock,
+      cost_price,
       unit,
+      min_quantity,
+      description,
       active
     }
   };
+}
+
+async function ensureCategoryExists(name) {
+  try {
+    await db.query('INSERT IGNORE INTO product_categories (name) VALUES (?)', [name]);
+  } catch (error) {
+    console.error('تعذر تسجيل التصنيف:', error.message);
+  }
 }
 
 function productsSelectSql() {
@@ -52,7 +70,10 @@ function productsSelectSql() {
       p.category,
       p.price,
       p.stock,
+      p.cost_price,
       p.unit,
+      p.min_quantity,
+      p.description,
       p.active,
       COALESCE(s.total_sold, 0) AS total_sold
     FROM products p
@@ -68,13 +89,139 @@ function productsSelectSql() {
 // GET /api/products/categories
 router.get('/categories', requireAuth, async (req, res) => {
   try {
-    const [rows] = await db.query(
-      "SELECT DISTINCT category FROM products WHERE category IS NOT NULL AND category <> '' ORDER BY category ASC"
-    );
-    res.json({ success: true, data: rows.map((row) => row.category) });
+    const [rows] = await db.query(`
+      SELECT category AS name FROM products WHERE category IS NOT NULL AND TRIM(category) <> ''
+      UNION SELECT name FROM product_categories
+      ORDER BY name ASC
+    `);
+    res.json({ success: true, data: rows.map((row) => row.name) });
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, message: 'فشل في جلب التصنيفات' });
+  }
+});
+
+router.post('/categories', requireAdmin, async (req, res) => {
+  const name = String(req.body.name || '').trim();
+  if (!name) return res.status(400).json({ success: false, message: 'اسم التصنيف مطلوب' });
+  if (name.length > 100) return res.status(400).json({ success: false, message: 'اسم التصنيف يجب ألا يتجاوز 100 حرف' });
+  if (name === 'الكل') return res.status(400).json({ success: false, message: 'هذا الاسم محجوز لعرض كل المنتجات' });
+  try {
+    await db.query('INSERT INTO product_categories (name) VALUES (?)', [name]);
+    res.status(201).json({ success: true, data: name, message: 'تمت إضافة التصنيف' });
+  } catch (error) {
+    if (error.code === 'ER_DUP_ENTRY') return res.status(409).json({ success: false, message: 'التصنيف موجود بالفعل' });
+    console.error(error);
+    res.status(500).json({ success: false, message: 'فشل في إضافة التصنيف' });
+  }
+});
+
+// GET /api/products/categories/details
+router.get('/categories/details', requireAuth, async (req, res) => {
+  try {
+    const [rows] = await db.query(`
+      SELECT
+        c.id,
+        c.name,
+        c.created_at,
+        COUNT(p.id) AS products_count,
+        COALESCE(SUM(p.stock), 0) AS total_stock,
+        COALESCE(SUM(p.stock * p.price), 0) AS total_value
+      FROM product_categories c
+      LEFT JOIN products p ON p.active = 1 AND p.category = c.name
+      GROUP BY c.id, c.name, c.created_at
+      ORDER BY c.name ASC
+    `);
+
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: 'فشل في جلب التصنيفات' });
+  }
+});
+
+// PUT /api/products/categories/:id
+router.put('/categories/:id', requireAdmin, async (req, res) => {
+  const categoryId = Number(req.params.id);
+  if (!Number.isInteger(categoryId) || categoryId <= 0) {
+    return res.status(400).json({ success: false, message: 'معرف التصنيف غير صالح' });
+  }
+
+  const name = String(req.body.name || '').trim();
+  if (!name) return res.status(400).json({ success: false, message: 'اسم التصنيف مطلوب' });
+  if (name.length > 100) return res.status(400).json({ success: false, message: 'اسم التصنيف يجب ألا يتجاوز 100 حرف' });
+
+  const conn = await db.getConnection();
+
+  try {
+    await conn.beginTransaction();
+
+    const [[category]] = await conn.query(
+      'SELECT id, name FROM product_categories WHERE id = ? FOR UPDATE',
+      [categoryId]
+    );
+
+    if (!category) {
+      await conn.rollback();
+      return res.status(404).json({ success: false, message: 'التصنيف غير موجود' });
+    }
+
+    await conn.query('UPDATE product_categories SET name = ? WHERE id = ?', [name, categoryId]);
+
+    if (category.name !== name) {
+      await conn.query('UPDATE products SET category = ? WHERE category = ?', [name, category.name]);
+    }
+
+    await conn.commit();
+    res.json({ success: true, message: 'تم تحديث التصنيف بنجاح' });
+  } catch (error) {
+    await conn.rollback();
+
+    if (error.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ success: false, message: 'التصنيف موجود بالفعل' });
+    }
+
+    console.error(error);
+    res.status(500).json({ success: false, message: 'فشل في تحديث التصنيف' });
+  } finally {
+    conn.release();
+  }
+});
+
+// DELETE /api/products/categories/:id
+router.delete('/categories/:id', requireAdmin, async (req, res) => {
+  const categoryId = Number(req.params.id);
+  if (!Number.isInteger(categoryId) || categoryId <= 0) {
+    return res.status(400).json({ success: false, message: 'معرف التصنيف غير صالح' });
+  }
+
+  try {
+    const [[category]] = await db.query(
+      'SELECT id, name FROM product_categories WHERE id = ? LIMIT 1',
+      [categoryId]
+    );
+
+    if (!category) {
+      return res.status(404).json({ success: false, message: 'التصنيف غير موجود' });
+    }
+
+    const [[usage]] = await db.query(
+      'SELECT COUNT(*) AS total FROM products WHERE category = ?',
+      [category.name]
+    );
+
+    if (usage.total > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `لا يمكن حذف التصنيف لأنه مستخدم في ${usage.total} صنف`
+      });
+    }
+
+    await db.query('DELETE FROM product_categories WHERE id = ?', [categoryId]);
+    res.json({ success: true, message: 'تم حذف التصنيف بنجاح' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: 'فشل في حذف التصنيف' });
   }
 });
 
@@ -166,46 +313,25 @@ router.post('/', requireAdmin, async (req, res) => {
     return res.status(400).json({ success: false, message: payload.error });
   }
 
-  const conn = await db.getConnection();
-
   try {
-    await conn.beginTransaction();
-
-    const openingStock = payload.data.stock;
-    const [result] = await conn.query(
-      'INSERT INTO products (name, barcode, category, price, stock, unit, active) VALUES (?, ?, ?, ?, 0, ?, ?)',
+    const stock = payload.data.stock;
+    const [result] = await db.query(
+      'INSERT INTO products (name, barcode, category, price, stock, cost_price, unit, min_quantity, description, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         payload.data.name,
         payload.data.barcode,
         payload.data.category,
         payload.data.price,
+        stock,
+        payload.data.cost_price,
         payload.data.unit,
+        payload.data.min_quantity,
+        payload.data.description,
         payload.data.active
       ]
     );
 
-    if (openingStock > 0) {
-      const primaryWarehouse = await getPrimaryWarehouse(conn, { lock: true });
-      if (!primaryWarehouse) {
-        throw new Error('WAREHOUSE_NOT_FOUND');
-      }
-
-      await createStockDocument(conn, {
-        documentType: 'adjustment_in',
-        warehouseId: primaryWarehouse.id,
-        paidAmount: 0,
-        notes: `رصيد افتتاحي للصنف ${payload.data.name}`,
-        items: [{
-          product_id: result.insertId,
-          product_name: payload.data.name,
-          quantity: openingStock,
-          unit_price: payload.data.price
-        }],
-        createdBy: req.session.user.id
-      });
-    }
-
-    await conn.commit();
+    await ensureCategoryExists(payload.data.category);
 
     const [[product]] = await db.query(
       'SELECT * FROM products WHERE id = ? LIMIT 1',
@@ -218,16 +344,12 @@ router.post('/', requireAdmin, async (req, res) => {
       message: 'تمت إضافة المنتج بنجاح'
     });
   } catch (error) {
-    await conn.rollback();
-
     if (error.code === 'ER_DUP_ENTRY') {
       return res.status(409).json({ success: false, message: 'الباركود مسجل مسبقًا' });
     }
 
     console.error(error);
     res.status(500).json({ success: false, message: 'فشل في إضافة المنتج' });
-  } finally {
-    conn.release();
   }
 });
 
@@ -243,85 +365,107 @@ router.put('/:id', requireAdmin, async (req, res) => {
     return res.status(400).json({ success: false, message: payload.error });
   }
 
-  const conn = await db.getConnection();
-
   try {
-    await conn.beginTransaction();
-
-    const [[existingProduct]] = await conn.query(
-      'SELECT id, name, stock FROM products WHERE id = ? FOR UPDATE',
+    const [existing] = await db.query(
+      'SELECT id FROM products WHERE id = ? LIMIT 1',
       [productId]
     );
-
-    if (!existingProduct) {
-      await conn.rollback();
+    if (!existing.length) {
       return res.status(404).json({ success: false, message: 'المنتج غير موجود' });
     }
 
-    await conn.query(
+    await db.query(
       `UPDATE products
-       SET name = ?, barcode = ?, category = ?, price = ?, unit = ?, active = ?
+       SET name = ?, barcode = ?, category = ?, price = ?, stock = ?, cost_price = ?, unit = ?, min_quantity = ?, description = ?, active = ?
        WHERE id = ?`,
       [
         payload.data.name,
         payload.data.barcode,
         payload.data.category,
         payload.data.price,
+        payload.data.stock,
+        payload.data.cost_price,
         payload.data.unit,
+        payload.data.min_quantity,
+        payload.data.description,
         payload.data.active,
         productId
       ]
     );
 
-    const currentStock = roundQty(existingProduct.stock);
-    const requestedStock = roundQty(payload.data.stock);
-    const stockDelta = roundQty(requestedStock - currentStock);
+    await ensureCategoryExists(payload.data.category);
 
-    if (stockDelta !== 0) {
-      const primaryWarehouse = await getPrimaryWarehouse(conn, { lock: true });
-      if (!primaryWarehouse) {
-        throw new Error('WAREHOUSE_NOT_FOUND');
-      }
-
-      await createStockDocument(conn, {
-        documentType: stockDelta > 0 ? 'adjustment_in' : 'adjustment_out',
-        warehouseId: primaryWarehouse.id,
-        paidAmount: 0,
-        notes: `تسوية رصيد من شاشة المنتجات للصنف ${payload.data.name}`,
-        items: [{
-          product_id: productId,
-          product_name: payload.data.name,
-          quantity: Math.abs(stockDelta),
-          unit_price: payload.data.price
-        }],
-        createdBy: req.session.user.id
-      });
-    }
-
-    await conn.commit();
     res.json({ success: true, message: 'تم تحديث المنتج' });
   } catch (error) {
-    await conn.rollback();
-
     if (error.code === 'ER_DUP_ENTRY') {
       return res.status(409).json({ success: false, message: 'الباركود مسجل مسبقًا' });
     }
-
-    if (error.message === 'WAREHOUSE_NOT_FOUND') {
-      return res.status(500).json({ success: false, message: 'لا يوجد مخزن رئيسي مضبوط للنظام' });
-    }
-
-    if (error.message?.startsWith('INSUFFICIENT_STOCK:')) {
-      return res.status(400).json({
-        success: false,
-        message: 'لا يمكن خفض الرصيد من شاشة المنتجات لأن الكمية غير متوفرة في المخزن الرئيسي. استخدم شاشة المخازن للتوزيع أو الصرف أولًا.'
-      });
-    }
-
     console.error(error);
     res.status(500).json({ success: false, message: 'فشل في تحديث المنتج' });
-  } finally {
-    conn.release();
+  }
+});
+
+// GET /api/products/:id
+router.get('/:id', requireAuth, async (req, res) => {
+  const productId = Number(req.params.id);
+  if (!Number.isInteger(productId) || productId <= 0) {
+    return res.status(400).json({ success: false, message: 'معرف المنتج غير صالح' });
+  }
+
+  try {
+    const [[product]] = await db.query(
+      'SELECT * FROM products WHERE id = ? AND active = 1',
+      [productId]
+    );
+
+    if (!product) {
+      return res.status(404).json({ success: false, message: 'المنتج غير موجود' });
+    }
+
+    res.json({ success: true, data: product });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: 'فشل في جلب المنتج' });
+  }
+});
+
+// PUT /api/products/:id/stock
+router.put('/:id/stock', requireAdmin, async (req, res) => {
+  const productId = Number(req.params.id);
+  if (!Number.isInteger(productId) || productId <= 0) {
+    return res.status(400).json({ success: false, message: 'معرف المنتج غير صالح' });
+  }
+
+  const { operation, quantity } = req.body;
+  const qty = roundQty(quantity);
+  if (!['add', 'sub', 'set'].includes(operation) || qty < 0) {
+    return res.status(400).json({ success: false, message: 'بيانات العملية غير صالحة' });
+  }
+
+  try {
+    const [[product]] = await db.query(
+      'SELECT id, stock FROM products WHERE id = ? LIMIT 1',
+      [productId]
+    );
+
+    if (!product) {
+      return res.status(404).json({ success: false, message: 'المنتج غير موجود' });
+    }
+
+    let newStock;
+    if (operation === 'add') {
+      newStock = roundQty(product.stock + qty);
+    } else if (operation === 'sub') {
+      newStock = Math.max(0, roundQty(product.stock - qty));
+    } else {
+      newStock = qty;
+    }
+
+    await db.query('UPDATE products SET stock = ? WHERE id = ?', [newStock, productId]);
+    res.json({ success: true, message: 'تم تعديل المخزون' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: 'فشل في تعديل المخزون' });
   }
 });
 

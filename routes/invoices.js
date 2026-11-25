@@ -1,7 +1,7 @@
 const express = require('express');
 const db = require('../config/db');
 const { requireAuth } = require('../middleware/auth');
-const { getSalesWarehouse, replaceReferenceDocument, reverseDocument } = require('../services/inventory');
+const { replaceReferenceDocument, reverseDocument, recordMovement } = require('../services/inventory');
 
 const router = express.Router();
 
@@ -122,6 +122,23 @@ function mapInvoiceItemsToStockItems(items) {
     }));
 }
 
+async function deductStock(conn, items) {
+  for (const item of items) {
+    const [[prod]] = await conn.query(
+      'SELECT stock FROM products WHERE id = ? FOR UPDATE',
+      [item.product_id]
+    );
+    if (!prod) throw new Error(`PRODUCT_NOT_FOUND:${item.product_name}`);
+    if (prod.stock < item.quantity) {
+      throw new Error(`INSUFFICIENT_STOCK:${item.product_name} (المتوفر ${prod.stock}, المطلوب ${item.quantity})`);
+    }
+    await conn.query(
+      'UPDATE products SET stock = stock - ? WHERE id = ?',
+      [item.quantity, item.product_id]
+    );
+  }
+}
+
 // POST /api/invoices
 router.post('/', requireAuth, async (req, res) => {
   const payload = normalizeInvoicePayload(req.body);
@@ -134,11 +151,6 @@ router.post('/', requireAuth, async (req, res) => {
   try {
     conn = await db.getConnection();
     await conn.beginTransaction();
-
-    const salesWarehouse = await getSalesWarehouse(conn, { lock: true });
-    if (!salesWarehouse) {
-      throw new Error('WAREHOUSE_NOT_FOUND');
-    }
 
     const invoiceNumber = generateInvoiceNumber();
     const [invoiceResult] = await conn.query(
@@ -159,6 +171,7 @@ router.post('/', requireAuth, async (req, res) => {
         req.session.user.id
       ]
     );
+    const newInvoiceId = invoiceResult.insertId;
 
     for (const item of payload.data.items) {
       await conn.query(
@@ -166,7 +179,7 @@ router.post('/', requireAuth, async (req, res) => {
            (invoice_id, product_id, product_name, barcode, unit_price, quantity, subtotal)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
-          invoiceResult.insertId,
+          newInvoiceId,
           item.product_id,
           item.product_name,
           item.barcode,
@@ -177,14 +190,14 @@ router.post('/', requireAuth, async (req, res) => {
       );
     }
 
-    await replaceReferenceDocument(conn, {
-      referenceType: 'invoice',
-      referenceId: invoiceResult.insertId,
-      documentType: 'invoice_sale',
-      warehouseId: salesWarehouse.id,
-      paidAmount: payload.data.netTotal,
-      notes: `حركة بيع مرتبطة بالفاتورة ${invoiceNumber}`,
-      items: mapInvoiceItemsToStockItems(payload.data.items),
+    const stockItems = mapInvoiceItemsToStockItems(payload.data.items);
+    await deductStock(conn, stockItems);
+
+    await recordMovement(conn, {
+      type: 'sale',
+      invoiceId: newInvoiceId,
+      items: stockItems,
+      notes: `فاتورة مبيعات ${invoiceNumber}`,
       createdBy: req.session.user.id
     });
 
@@ -192,7 +205,7 @@ router.post('/', requireAuth, async (req, res) => {
     res.status(201).json({
       success: true,
       invoice: {
-        id: invoiceResult.insertId,
+        id: newInvoiceId,
         invoice_number: invoiceNumber,
         net_total: payload.data.netTotal,
         change_amount: payload.data.changeAmount
@@ -202,10 +215,6 @@ router.post('/', requireAuth, async (req, res) => {
   } catch (error) {
     if (conn) await conn.rollback();
     console.error(error);
-
-    if (error.message === 'WAREHOUSE_NOT_FOUND') {
-      return res.status(500).json({ success: false, message: 'لا يوجد مخزن بيع رئيسي مضبوط للنظام' });
-    }
 
     if (error.message?.startsWith('PRODUCT_NOT_FOUND:')) {
       return res.status(400).json({
@@ -217,7 +226,7 @@ router.post('/', requireAuth, async (req, res) => {
     if (error.message?.startsWith('INSUFFICIENT_STOCK:')) {
       return res.status(400).json({
         success: false,
-        message: `الكمية غير متوفرة في مخزن البيع: ${error.message.split(':')[1]}`
+        message: `الكمية غير متوفرة: ${error.message.split(':')[1]}`
       });
     }
 
@@ -260,10 +269,11 @@ router.put('/:id', requireAuth, async (req, res) => {
       return res.status(404).json({ success: false, message: 'الفاتورة غير موجودة' });
     }
 
-    const salesWarehouse = await getSalesWarehouse(conn, { lock: true });
-    if (!salesWarehouse) {
-      throw new Error('WAREHOUSE_NOT_FOUND');
-    }
+    const oldItems = await replaceReferenceDocument(conn, {
+      referenceId: invoiceId,
+      items: mapInvoiceItemsToStockItems(payload.data.items),
+      createdBy: req.session.user.id
+    });
 
     await conn.query(
       `UPDATE invoices
@@ -302,14 +312,23 @@ router.put('/:id', requireAuth, async (req, res) => {
       );
     }
 
-    await replaceReferenceDocument(conn, {
-      referenceType: 'invoice',
-      referenceId: invoiceId,
-      documentType: 'invoice_sale',
-      warehouseId: salesWarehouse.id,
-      paidAmount: payload.data.netTotal,
-      notes: `تحديث حركة بيع للفواتير ${invoice.invoice_number}`,
-      items: mapInvoiceItemsToStockItems(payload.data.items),
+    const newStockItems = mapInvoiceItemsToStockItems(payload.data.items);
+
+    if (oldItems && oldItems.length) {
+      await recordMovement(conn, {
+        type: 'sale_reversal',
+        invoiceId: invoiceId,
+        items: oldItems,
+        notes: `إلغاء أصناف قديمة - فاتورة ${invoice.invoice_number}`,
+        createdBy: req.session.user.id
+      });
+    }
+
+    await recordMovement(conn, {
+      type: 'sale',
+      invoiceId: invoiceId,
+      items: newStockItems,
+      notes: `تحديث فاتورة ${invoice.invoice_number}`,
       createdBy: req.session.user.id
     });
 
@@ -328,10 +347,6 @@ router.put('/:id', requireAuth, async (req, res) => {
     if (conn) await conn.rollback();
     console.error(error);
 
-    if (error.message === 'WAREHOUSE_NOT_FOUND') {
-      return res.status(500).json({ success: false, message: 'لا يوجد مخزن بيع رئيسي مضبوط للنظام' });
-    }
-
     if (error.message?.startsWith('PRODUCT_NOT_FOUND:')) {
       return res.status(400).json({
         success: false,
@@ -342,7 +357,7 @@ router.put('/:id', requireAuth, async (req, res) => {
     if (error.message?.startsWith('INSUFFICIENT_STOCK:')) {
       return res.status(400).json({
         success: false,
-        message: `الكمية غير متوفرة في مخزن البيع: ${error.message.split(':')[1]}`
+        message: `الكمية غير متوفرة: ${error.message.split(':')[1]}`
       });
     }
 
@@ -380,18 +395,15 @@ router.delete('/:id', requireAuth, async (req, res) => {
       return res.status(404).json({ success: false, message: 'الفاتورة غير موجودة' });
     }
 
-    const [[stockDocument]] = await conn.query(
-      `SELECT id
-       FROM stock_documents
-       WHERE reference_type = ? AND reference_id = ?
-       LIMIT 1
-       FOR UPDATE`,
-      ['invoice', invoiceId]
-    );
+    const oldItems = await reverseDocument(conn, invoiceId);
 
-    if (stockDocument) {
-      await reverseDocument(conn, stockDocument.id);
-    }
+    await recordMovement(conn, {
+      type: 'sale_reversal',
+      invoiceId: invoiceId,
+      items: oldItems,
+      notes: `حذف فاتورة ${invoice.invoice_number}`,
+      createdBy: req.session.user.id
+    });
 
     await conn.query('DELETE FROM invoice_items WHERE invoice_id = ?', [invoiceId]);
     await conn.query('DELETE FROM invoices WHERE id = ?', [invoiceId]);
@@ -401,15 +413,7 @@ router.delete('/:id', requireAuth, async (req, res) => {
   } catch (error) {
     if (conn) await conn.rollback();
     console.error(error);
-
-    if (error.message?.startsWith('INSUFFICIENT_STOCK:')) {
-      return res.status(400).json({
-        success: false,
-        message: `لا يمكن حذف الفاتورة لأن الرصيد الحالي لا يسمح بعكس الحركة: ${error.message.split(':')[1]}`
-      });
-    }
-
-    res.status(500).json({ success: false, message: 'فشل في حذف الفاتورة' });
+    res.status(500).json({ success: false, message: error.message || 'فشل في حذف الفاتورة' });
   } finally {
     if (conn) conn.release();
   }
@@ -522,7 +526,36 @@ router.get('/:id', requireAuth, async (req, res) => {
       [invoiceId]
     );
 
-    res.json({ success: true, data: { ...invoice, items } });
+    const [[returnSummary]] = await db.query(
+      'SELECT COALESCE(SUM(total_refund), 0) AS total_returned FROM return_invoices WHERE original_invoice_id = ?',
+      [invoiceId]
+    );
+
+    const [returnedItems] = await db.query(
+      `SELECT ri.product_id, COALESCE(SUM(ri.quantity), 0) AS returned_qty
+       FROM return_invoice_items ri
+       JOIN return_invoices r ON r.id = ri.return_invoice_id
+       WHERE r.original_invoice_id = ?
+       GROUP BY ri.product_id`,
+      [invoiceId]
+    );
+
+    const returnedMap = {};
+    returnedItems.forEach(r => { returnedMap[r.product_id] = parseFloat(r.returned_qty); });
+
+    const itemsWithReturns = items.map(it => ({
+      ...it,
+      returned_qty: returnedMap[it.product_id] || 0
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        ...invoice,
+        items: itemsWithReturns,
+        total_returned: parseFloat(returnSummary?.total_returned || 0)
+      }
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, message: 'فشل في جلب الفاتورة' });

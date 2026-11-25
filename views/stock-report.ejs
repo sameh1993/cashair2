@@ -1,0 +1,233 @@
+<%- include('partials/head', { title:'تقرير المخزن', page:'stock-report', user:user }) %>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h5 class="mb-0 fw-800">تقرير المخزن</h5>
+    <small class="text-muted">نظرة عامة على المخزون ورصيد الأصناف</small>
+  </div>
+  <button class="btn btn-primary btn-sm" onclick="quickProductModal()"><i class="bi bi-plus-lg"></i> صنف جديد</button>
+</div>
+
+<!-- KPIs -->
+<div class="row g-3 mb-4" id="summaryCards"></div>
+
+<!-- Tabs -->
+<ul class="nav nav-tabs mb-3" id="reportTabs">
+  <li class="nav-item"><button class="nav-link active" data-tab="all"><i class="bi bi-grid"></i> كل الأصناف</button></li>
+  <li class="nav-item"><button class="nav-link" data-tab="low"><i class="bi bi-exclamation-triangle"></i> على وشك النفاذ</button></li>
+  <li class="nav-item"><button class="nav-link" data-tab="out"><i class="bi bi-x-circle"></i> ناقص</button></li>
+  <li class="nav-item"><button class="nav-link" data-tab="movements"><i class="bi bi-arrow-left-right"></i> آخر الحركات</button></li>
+</ul>
+
+<!-- Table -->
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-box-seam text-primary"></i> <span id="tableTitle">كل الأصناف</span></span>
+    <span class="badge bg-secondary" id="rowCount">0</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>الصنف</th>
+          <th>الباركود</th>
+          <th>الفئة</th>
+          <th>الرصيد</th>
+          <th>الحد الأدنى</th>
+          <th>الحالة</th>
+          <th>سعر البيع</th>
+          <th>القيمة</th>
+        </tr>
+      </thead>
+      <tbody id="reportBody">
+        <tr><td colspan="9" class="text-center text-muted py-4">جاري التحميل...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+let reportData = null;
+
+document.getElementById('reportTabs').addEventListener('click', e => {
+  const btn = e.target.closest('.nav-link');
+  if (!btn) return;
+  const tab = btn.dataset.tab;
+  document.querySelectorAll('#reportTabs .nav-link').forEach(l => l.classList.remove('active'));
+  btn.classList.add('active');
+  renderTable(tab);
+});
+
+async function load() {
+  const r = await fetch('/api/stock/report');
+  const res = await r.json();
+  if (!res.success) return toast(res.message, 'error');
+  reportData = res.data;
+
+  const { stats } = reportData;
+  document.getElementById('summaryCards').innerHTML = `
+    <div class="col-6 col-md-3">
+      <div class="kpi-card d-flex align-items-center gap-3">
+        <div class="kpi-icon kpi-blue"><i class="bi bi-box-seam"></i></div>
+        <div><div class="kpi-label">إجمالي الأصناف</div><div class="kpi-value" id="kpiTotal">${stats.total_products}</div></div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="kpi-card d-flex align-items-center gap-3">
+        <div class="kpi-icon kpi-amber"><i class="bi bi-cubes"></i></div>
+        <div><div class="kpi-label">إجمالي الوحدات</div><div class="kpi-value" id="kpiItems">${stats.total_items}</div></div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="kpi-card d-flex align-items-center gap-3">
+        <div class="kpi-icon kpi-red"><i class="bi bi-exclamation-triangle"></i></div>
+        <div><div class="kpi-label">على وشك النفاذ</div><div class="kpi-value" id="kpiLow">${stats.low_stock_count}</div></div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="kpi-card d-flex align-items-center gap-3">
+        <div class="kpi-icon ${stats.out_of_stock_count > 0 ? 'kpi-red' : 'kpi-green'}"><i class="bi bi-x-circle"></i></div>
+        <div><div class="kpi-label">ناقص</div><div class="kpi-value" id="kpiOut">${stats.out_of_stock_count}</div></div>
+      </div>
+    </div>`;
+
+  renderTable('all');
+}
+
+function renderTable(tab) {
+  if (!reportData) return;
+  const tbody = document.getElementById('reportBody');
+  const titleMap = { all: 'كل الأصناف', low: 'على وشك النفاذ', out: 'ناقص', movements: 'آخر الحركات' };
+  document.getElementById('tableTitle').textContent = titleMap[tab] || '';
+
+  let list;
+  if (tab === 'low') list = reportData.low_stock;
+  else if (tab === 'out') list = reportData.out_of_stock;
+  else if (tab === 'movements') return renderMovements();
+  else list = reportData.products;
+
+  document.getElementById('rowCount').textContent = list.length;
+
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4"><i class="bi bi-check-circle text-success fs-3 d-block mb-2"></i>جميع الأصناف متوفرة بكميات كافية</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = list.map((p, i) => {
+    const stock = Number(p.stock);
+    const min = Number(p.min_quantity || 5);
+    const price = Number(p.price);
+    const cost = Number(p.cost_price || price);
+    const value = stock * cost;
+    let status, badgeClass;
+    if (stock <= 0) { status = 'ناقص'; badgeClass = 'bg-danger'; }
+    else if (stock <= min) { status = 'على وشك النفاذ'; badgeClass = 'bg-warning text-dark'; }
+    else { status = 'متوفر'; badgeClass = 'badge-paid'; }
+
+    return `<tr>
+      <td class="text-muted small">${i+1}</td>
+      <td><strong>${p.name}</strong></td>
+      <td class="ltr small text-muted">${p.barcode || '—'}</td>
+      <td>${p.category ? `<span class="badge badge-cash px-2">${p.category}</span>` : '—'}</td>
+      <td class="fw-bold ${stock <= 0 ? 'text-danger' : stock <= min ? 'text-warning' : ''}">${stock}</td>
+      <td class="text-muted small">${min}</td>
+      <td><span class="badge ${badgeClass} px-2">${status}</span></td>
+      <td class="fw-700 text-primary">${fmt(price)}</td>
+      <td class="text-muted small">${fmt(value)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderMovements() {
+  const tbody = document.getElementById('reportBody');
+  const list = reportData.recent_movements || [];
+  document.getElementById('rowCount').textContent = list.length;
+
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">لا توجد حركات حديثة</td></tr>';
+    return;
+  }
+
+  const typeMap = { purchase: 'إضافة', return_to_supplier: 'مرتجع', adjustment: 'تسوية' };
+  const typeIcon = { purchase: 'bi-box-arrow-in-down text-success', return_to_supplier: 'bi-box-arrow-up text-danger', adjustment: 'bi-sliders text-secondary' };
+  tbody.innerHTML = list.map((m, i) => {
+    const isOut = m.type === 'return_to_supplier';
+    return `<tr>
+      <td class="text-muted small">${i+1}</td>
+      <td class="small">${new Date(m.created_at).toLocaleString('ar-EG')}</td>
+      <td><i class="${typeIcon[m.type] || 'bi-circle'} ms-1"></i>${typeMap[m.type] || m.type}</td>
+      <td class="ltr small text-muted">${m.document_number || '—'}</td>
+      <td>${m.supplier_name || '—'}</td>
+      <td>${m.product_name}</td>
+      <td class="${isOut ? 'text-danger' : 'text-success'} fw-bold">${isOut ? '−' : '+'}${m.quantity}</td>
+    </tr>`;
+  }).join('');
+}
+
+load();
+</script>
+
+<!-- Quick product modal -->
+<div class="modal fade" id="quickProductModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:380px">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title">إضافة صنف جديد</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-2">
+          <label class="form-label">اسم الصنف <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" id="qpName">
+        </div>
+        <div class="mb-2">
+          <label class="form-label">الباركود</label>
+          <input type="text" class="form-control" id="qpBarcode">
+        </div>
+        <div class="mb-2">
+          <label class="form-label">سعر البيع <span class="text-danger">*</span></label>
+          <input type="number" class="form-control" id="qpPrice" step="0.01" min="0">
+        </div>
+        <div class="mb-2">
+          <label class="form-label">الفئة</label>
+          <input type="text" class="form-control" id="qpCategory" placeholder="عام">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+        <button class="btn btn-primary" onclick="quickProductSave()"><i class="bi bi-check2 me-1"></i>حفظ</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const qpModal = new bootstrap.Modal(document.getElementById('quickProductModal'));
+
+function quickProductModal() {
+  ['qpName','qpBarcode','qpPrice','qpCategory'].forEach(id => document.getElementById(id).value = '');
+  qpModal.show();
+}
+
+async function quickProductSave() {
+  const name = document.getElementById('qpName').value.trim();
+  const price = parseFloat(document.getElementById('qpPrice').value) || 0;
+  if (!name || !price) return toast('الاسم وسعر البيع مطلوبان', 'error');
+  const r = await fetch('/api/products', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name,
+      barcode: document.getElementById('qpBarcode').value.trim(),
+      price,
+      category: document.getElementById('qpCategory').value.trim() || 'عام',
+      quantity: 0
+    })
+  });
+  const res = await r.json();
+  if (res.success) { toast(res.message); qpModal.hide(); load(); }
+  else toast(res.message, 'error');
+}
+</script>
+<%- include('partials/foot') %>

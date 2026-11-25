@@ -81,6 +81,14 @@ async function ensureCoreSchema() {
 }
 
 async function ensureProductsSchema() {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS product_categories (
+      id INT PRIMARY KEY AUTO_INCREMENT,
+      name VARCHAR(100) NOT NULL UNIQUE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   const [categoryColumn] = await db.query(`
     SELECT COLUMN_NAME
     FROM INFORMATION_SCHEMA.COLUMNS
@@ -105,6 +113,25 @@ async function ensureProductsSchema() {
     SET category = 'عام'
     WHERE category IS NULL OR TRIM(category) = ''
   `);
+
+  // إضافة أعمدة إضافية إذا لم تكن موجودة
+  const extraColumns = [
+    { name: 'cost_price',    def: 'DECIMAL(12,3) NOT NULL DEFAULT 0 AFTER price' },
+    { name: 'min_quantity',  def: 'INT DEFAULT 5 AFTER stock' },
+    { name: 'description',   def: 'TEXT NULL AFTER unit' },
+  ];
+
+  for (const col of extraColumns) {
+    const [[row]] = await db.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = ?`,
+      [col.name]
+    );
+    if (!row) {
+      await db.query(`ALTER TABLE products ADD COLUMN \`${col.name}\` ${col.def}`);
+      console.log(`ℹ️ تمت إضافة عمود ${col.name} إلى جدول products`);
+    }
+  }
 }
 
 async function ensureProductStockPrecision() {
@@ -168,14 +195,20 @@ async function ensureDefaultAdminUser() {
   console.log(`ℹ️ تم إنشاء المستخدم الافتراضي ${DEFAULT_ADMIN_USERNAME}`);
 }
 
-async function ensureWarehouseSchema() {
+async function ensureProductCategories() {
+  await db.query(`
+    INSERT IGNORE INTO product_categories (name)
+    SELECT DISTINCT TRIM(category)
+    FROM products
+    WHERE category IS NOT NULL AND TRIM(category) <> ''
+  `);
+}
+
+async function ensureSimpleWarehouse() {
   await db.query(`
     CREATE TABLE IF NOT EXISTS warehouses (
       id          INT PRIMARY KEY AUTO_INCREMENT,
       name        VARCHAR(120) NOT NULL,
-      code        VARCHAR(40) NOT NULL UNIQUE,
-      warehouse_type ENUM('main','rep') NOT NULL DEFAULT 'rep',
-      rep_code    VARCHAR(40) NULL,
       location    VARCHAR(255),
       notes       TEXT,
       is_primary  TINYINT(1) NOT NULL DEFAULT 0,
@@ -185,300 +218,164 @@ async function ensureWarehouseSchema() {
     )
   `);
 
-  const [warehouseTypeColumn] = await db.query(`
-    SELECT COLUMN_NAME
-    FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE TABLE_SCHEMA = DATABASE()
-      AND TABLE_NAME = 'warehouses'
-      AND COLUMN_NAME = 'warehouse_type'
-    LIMIT 1
-  `);
-
-  if (!warehouseTypeColumn.length) {
-    await db.query(`
-      ALTER TABLE warehouses
-      ADD COLUMN warehouse_type ENUM('main','rep') NOT NULL DEFAULT 'rep'
-      AFTER code
-    `);
-  }
-
-  const [repCodeColumn] = await db.query(`
-    SELECT COLUMN_NAME
-    FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE TABLE_SCHEMA = DATABASE()
-      AND TABLE_NAME = 'warehouses'
-      AND COLUMN_NAME = 'rep_code'
-    LIMIT 1
-  `);
-
-  if (!repCodeColumn.length) {
-    await db.query(`
-      ALTER TABLE warehouses
-      ADD COLUMN rep_code VARCHAR(40) NULL
-      AFTER warehouse_type
-    `);
-  }
-
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS warehouse_stock (
-      warehouse_id INT NOT NULL,
-      product_id   INT NOT NULL,
-      quantity     DECIMAL(12,3) NOT NULL DEFAULT 0,
-      updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      PRIMARY KEY (warehouse_id, product_id),
-      CONSTRAINT fk_warehouse_stock_warehouse
-        FOREIGN KEY (warehouse_id) REFERENCES warehouses(id) ON DELETE CASCADE,
-      CONSTRAINT fk_warehouse_stock_product
-        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
-    )
-  `);
-
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS partners (
-      id          INT PRIMARY KEY AUTO_INCREMENT,
-      name        VARCHAR(150) NOT NULL,
-      type        ENUM('customer','supplier') NOT NULL,
-      phone       VARCHAR(50),
-      address     VARCHAR(255),
-      notes       TEXT,
-      active      TINYINT(1) NOT NULL DEFAULT 1,
-      created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      UNIQUE KEY uq_partner_name_type (name, type)
-    )
-  `);
-
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS stock_documents (
-      id              INT PRIMARY KEY AUTO_INCREMENT,
-      document_number VARCHAR(60) NOT NULL UNIQUE,
-      document_type   VARCHAR(30) NOT NULL,
-      warehouse_id    INT NOT NULL,
-      partner_id      INT NULL,
-      subtotal        DECIMAL(12,2) NOT NULL DEFAULT 0,
-      paid_amount     DECIMAL(12,2) NOT NULL DEFAULT 0,
-      debt_delta      DECIMAL(12,2) NOT NULL DEFAULT 0,
-      notes           TEXT,
-      reference_type  VARCHAR(30) NULL,
-      reference_id    INT NULL,
-      created_by      INT NULL,
-      created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      KEY idx_stock_documents_type_created (document_type, created_at),
-      KEY idx_stock_documents_warehouse (warehouse_id),
-      KEY idx_stock_documents_partner (partner_id),
-      KEY idx_stock_documents_reference (reference_type, reference_id),
-      UNIQUE KEY uq_stock_documents_reference (reference_type, reference_id),
-      CONSTRAINT fk_stock_documents_warehouse
-        FOREIGN KEY (warehouse_id) REFERENCES warehouses(id) ON DELETE RESTRICT,
-      CONSTRAINT fk_stock_documents_partner
-        FOREIGN KEY (partner_id) REFERENCES partners(id) ON DELETE SET NULL,
-      CONSTRAINT fk_stock_documents_user
-        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
-    )
-  `);
-
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS stock_document_items (
-      id            INT PRIMARY KEY AUTO_INCREMENT,
-      document_id   INT NOT NULL,
-      product_id    INT NOT NULL,
-      product_name  VARCHAR(255) NOT NULL,
-      quantity      DECIMAL(12,3) NOT NULL,
-      unit_price    DECIMAL(12,2) NOT NULL DEFAULT 0,
-      line_total    DECIMAL(12,2) NOT NULL DEFAULT 0,
-      KEY idx_stock_document_items_document (document_id),
-      KEY idx_stock_document_items_product (product_id),
-      CONSTRAINT fk_stock_document_items_document
-        FOREIGN KEY (document_id) REFERENCES stock_documents(id) ON DELETE CASCADE,
-      CONSTRAINT fk_stock_document_items_product
-        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT
-    )
-  `);
-
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS partner_ledger (
-      id          INT PRIMARY KEY AUTO_INCREMENT,
-      partner_id  INT NOT NULL,
-      source_type VARCHAR(30) NOT NULL,
-      source_id   INT NULL,
-      amount      DECIMAL(12,2) NOT NULL,
-      notes       TEXT,
-      created_by  INT NULL,
-      created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      KEY idx_partner_ledger_partner (partner_id, created_at),
-      CONSTRAINT fk_partner_ledger_partner
-        FOREIGN KEY (partner_id) REFERENCES partners(id) ON DELETE CASCADE,
-      CONSTRAINT fk_partner_ledger_user
-        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
-    )
-  `);
-
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS stock_counts (
-      id               INT PRIMARY KEY AUTO_INCREMENT,
-      count_number     VARCHAR(60) NOT NULL UNIQUE,
-      warehouse_id     INT NOT NULL,
-      notes            TEXT,
-      created_by       INT NULL,
-      created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      applied_at       TIMESTAMP NULL DEFAULT NULL,
-      KEY idx_stock_counts_warehouse_created (warehouse_id, created_at),
-      CONSTRAINT fk_stock_counts_warehouse
-        FOREIGN KEY (warehouse_id) REFERENCES warehouses(id) ON DELETE RESTRICT,
-      CONSTRAINT fk_stock_counts_user
-        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
-    )
-  `);
-
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS stock_count_items (
-      id                   INT PRIMARY KEY AUTO_INCREMENT,
-      stock_count_id       INT NOT NULL,
-      product_id           INT NOT NULL,
-      product_name         VARCHAR(255) NOT NULL,
-      system_quantity      DECIMAL(12,3) NOT NULL DEFAULT 0,
-      actual_quantity      DECIMAL(12,3) NOT NULL DEFAULT 0,
-      difference_quantity  DECIMAL(12,3) NOT NULL DEFAULT 0,
-      unit_price           DECIMAL(12,2) NOT NULL DEFAULT 0,
-      difference_value     DECIMAL(12,2) NOT NULL DEFAULT 0,
-      KEY idx_stock_count_items_count (stock_count_id),
-      KEY idx_stock_count_items_product (product_id),
-      CONSTRAINT fk_stock_count_items_count
-        FOREIGN KEY (stock_count_id) REFERENCES stock_counts(id) ON DELETE CASCADE,
-      CONSTRAINT fk_stock_count_items_product
-        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT
-    )
-  `);
-
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS stock_transfers (
-      id                    INT PRIMARY KEY AUTO_INCREMENT,
-      transfer_number       VARCHAR(60) NOT NULL UNIQUE,
-      from_warehouse_id     INT NOT NULL,
-      to_warehouse_id       INT NOT NULL,
-      notes                 TEXT,
-      created_by            INT NULL,
-      created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      KEY idx_stock_transfers_from_created (from_warehouse_id, created_at),
-      KEY idx_stock_transfers_to_created (to_warehouse_id, created_at),
-      CONSTRAINT fk_stock_transfers_from
-        FOREIGN KEY (from_warehouse_id) REFERENCES warehouses(id) ON DELETE RESTRICT,
-      CONSTRAINT fk_stock_transfers_to
-        FOREIGN KEY (to_warehouse_id) REFERENCES warehouses(id) ON DELETE RESTRICT,
-      CONSTRAINT fk_stock_transfers_user
-        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
-    )
-  `);
-
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS stock_transfer_items (
-      id            INT PRIMARY KEY AUTO_INCREMENT,
-      transfer_id   INT NOT NULL,
-      product_id    INT NOT NULL,
-      product_name  VARCHAR(255) NOT NULL,
-      quantity      DECIMAL(12,3) NOT NULL,
-      unit_price    DECIMAL(12,2) NOT NULL DEFAULT 0,
-      KEY idx_stock_transfer_items_transfer (transfer_id),
-      KEY idx_stock_transfer_items_product (product_id),
-      CONSTRAINT fk_stock_transfer_items_transfer
-        FOREIGN KEY (transfer_id) REFERENCES stock_transfers(id) ON DELETE CASCADE,
-      CONSTRAINT fk_stock_transfer_items_product
-        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT
-    )
-  `);
-
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS forecasts (
-      id            INT PRIMARY KEY AUTO_INCREMENT,
-      forecast_number VARCHAR(60) NOT NULL UNIQUE,
-      warehouse_id  INT NOT NULL,
-      period_label  VARCHAR(80) NOT NULL,
-      notes         TEXT,
-      created_by    INT NULL,
-      created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      KEY idx_forecasts_warehouse_created (warehouse_id, created_at),
-      CONSTRAINT fk_forecasts_warehouse
-        FOREIGN KEY (warehouse_id) REFERENCES warehouses(id) ON DELETE RESTRICT,
-      CONSTRAINT fk_forecasts_user
-        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
-    )
-  `);
-
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS forecast_items (
-      id            INT PRIMARY KEY AUTO_INCREMENT,
-      forecast_id   INT NOT NULL,
-      product_id    INT NOT NULL,
-      product_name  VARCHAR(255) NOT NULL,
-      quantity      DECIMAL(12,3) NOT NULL,
-      KEY idx_forecast_items_forecast (forecast_id),
-      KEY idx_forecast_items_product (product_id),
-      CONSTRAINT fk_forecast_items_forecast
-        FOREIGN KEY (forecast_id) REFERENCES forecasts(id) ON DELETE CASCADE,
-      CONSTRAINT fk_forecast_items_product
-        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT
-    )
-  `);
-}
-
-async function ensureDefaultWarehouse() {
-  const [[warehouseCount]] = await db.query(
-    'SELECT COUNT(*) AS total FROM warehouses'
-  );
-
+  const [[warehouseCount]] = await db.query('SELECT COUNT(*) AS total FROM warehouses');
   if (!warehouseCount.total) {
     await db.query(`
-      INSERT INTO warehouses (name, code, warehouse_type, location, notes, is_primary, active)
-      VALUES ('المخزن الرئيسي', 'MAIN', 'main', 'الفرع الرئيسي', 'تم إنشاؤه تلقائيًا', 1, 1)
+      INSERT INTO warehouses (name, is_primary, active)
+      VALUES ('المخزن الرئيسي', 1, 1)
     `);
-
-    console.log('ℹ️ تم إنشاء المخزن الرئيسي');
-  } else {
-    await db.query(`
-      UPDATE warehouses
-      SET warehouse_type = CASE WHEN is_primary = 1 THEN 'main' ELSE warehouse_type END
-    `);
-
-    const [[primaryWarehouse]] = await db.query(
-      'SELECT id FROM warehouses WHERE is_primary = 1 LIMIT 1'
-    );
-
-    if (!primaryWarehouse) {
-      await db.query(`
-        UPDATE warehouses
-        SET is_primary = CASE WHEN id = (SELECT id_keep FROM (SELECT id AS id_keep FROM warehouses ORDER BY id ASC LIMIT 1) tmp) THEN 1 ELSE 0 END
-      `);
-    }
   }
 }
 
-async function ensureSalesWarehouseSetting() {
-  const [[warehouse]] = await db.query(
-    'SELECT id FROM warehouses WHERE active = 1 ORDER BY is_primary DESC, id ASC LIMIT 1'
-  );
+async function ensureOtherTables() {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS shop_settings (
+      id          INT PRIMARY KEY DEFAULT 1,
+      shop_name   VARCHAR(200) NOT NULL DEFAULT 'محلي',
+      address     VARCHAR(255),
+      phone       VARCHAR(50),
+      phone2      VARCHAR(50),
+      tax_number  VARCHAR(100),
+      logo_url    VARCHAR(500),
+      invoice_note TEXT
+    )
+  `);
 
-  if (!warehouse) return;
+  await db.query(`
+    INSERT INTO shop_settings (id, shop_name) VALUES (1, 'محلي')
+    ON DUPLICATE KEY UPDATE shop_name = shop_name
+  `);
 
-  const [[settingRow]] = await db.query(
-    "SELECT `value` FROM settings WHERE `key` = 'sales_warehouse_id' LIMIT 1"
-  );
-  const currentWarehouseId = Number(settingRow?.value);
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS customers (
+      id            INT PRIMARY KEY AUTO_INCREMENT,
+      name          VARCHAR(150) NOT NULL,
+      phone         VARCHAR(50),
+      address       VARCHAR(255),
+      customer_type ENUM('cash','credit') NOT NULL DEFAULT 'cash',
+      notes         TEXT,
+      active        TINYINT(1) NOT NULL DEFAULT 1,
+      created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )
+  `);
 
-  if (currentWarehouseId > 0) {
-    const [[existingWarehouse]] = await db.query(
-      'SELECT id FROM warehouses WHERE id = ? AND active = 1 LIMIT 1',
-      [currentWarehouseId]
-    );
-    if (existingWarehouse) return;
-  }
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS suppliers (
+      id INT PRIMARY KEY AUTO_INCREMENT,
+      name VARCHAR(150) NOT NULL,
+      phone VARCHAR(50),
+      address VARCHAR(255),
+      notes TEXT,
+      active TINYINT(1) NOT NULL DEFAULT 1,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_suppliers_name (name)
+    )
+  `);
 
-  await db.query(
-    `INSERT INTO settings (\`key\`, \`value\`)
-     VALUES ('sales_warehouse_id', ?)
-     ON DUPLICATE KEY UPDATE \`value\` = VALUES(\`value\`)`,
-    [String(warehouse.id)]
-  );
+  await db.query(`
+    INSERT INTO customers (id, name, customer_type) VALUES (1, 'عميل نقدي', 'cash')
+    ON DUPLICATE KEY UPDATE name = name
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS return_invoices (
+      id                    INT PRIMARY KEY AUTO_INCREMENT,
+      original_invoice_id   INT NOT NULL,
+      customer_id           INT,
+      customer_name         VARCHAR(150),
+      total_refund          DECIMAL(10,2) NOT NULL DEFAULT 0,
+      reason                TEXT,
+      created_by            INT,
+      created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      KEY idx_return_original (original_invoice_id),
+      KEY idx_return_created_by (created_by)
+    )
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS return_invoice_items (
+      id                  INT PRIMARY KEY AUTO_INCREMENT,
+      return_invoice_id   INT NOT NULL,
+      product_id          INT,
+      product_name        VARCHAR(255) NOT NULL,
+      quantity            DECIMAL(10,3) NOT NULL,
+      unit_price          DECIMAL(10,2) NOT NULL,
+      total               DECIMAL(10,2) NOT NULL,
+      KEY idx_return_items_return (return_invoice_id),
+      CONSTRAINT fk_return_items_return
+        FOREIGN KEY (return_invoice_id) REFERENCES return_invoices(id) ON DELETE CASCADE
+    )
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS expenses (
+      id            INT PRIMARY KEY AUTO_INCREMENT,
+      category      VARCHAR(100) NOT NULL,
+      amount        DECIMAL(10,2) NOT NULL,
+      expense_date  DATE NOT NULL,
+      description   TEXT,
+      created_by    INT,
+      created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      KEY idx_expenses_date (expense_date),
+      KEY idx_expenses_category (category)
+    )
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS stock_movements (
+      id                INT PRIMARY KEY AUTO_INCREMENT,
+      type              ENUM('purchase','return_to_supplier','adjustment') NOT NULL,
+      document_number   VARCHAR(50),
+      supplier_name     VARCHAR(255),
+      notes             TEXT,
+      created_by        INT,
+      created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      KEY idx_stock_movements_type (type),
+      KEY idx_stock_movements_date (created_at)
+    )
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS stock_movement_items (
+      id            INT PRIMARY KEY AUTO_INCREMENT,
+      movement_id   INT NOT NULL,
+      product_id    INT,
+      product_name  VARCHAR(255) NOT NULL,
+      quantity      DECIMAL(12,3) NOT NULL,
+      unit_price    DECIMAL(10,2) DEFAULT 0,
+      total         DECIMAL(10,2) DEFAULT 0,
+      KEY idx_movement_items_movement (movement_id),
+      CONSTRAINT fk_movement_items_movement
+        FOREIGN KEY (movement_id) REFERENCES stock_movements(id) ON DELETE CASCADE,
+      CONSTRAINT fk_movement_items_product
+        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
+    )
+  `);
+
+  await db.query(`
+    INSERT IGNORE INTO suppliers (name)
+    SELECT DISTINCT TRIM(sm.supplier_name)
+    FROM stock_movements sm
+    WHERE sm.supplier_name IS NOT NULL AND TRIM(sm.supplier_name) <> ''
+  `);
+}
+
+async function ensureStockMovementsMigration() {
+  try {
+    await db.query(`
+      ALTER TABLE stock_movements
+      MODIFY COLUMN type ENUM('purchase','return_to_supplier','adjustment','sale','sale_reversal') NOT NULL
+    `);
+  } catch (_) {}
+  try {
+    await db.query(`
+      ALTER TABLE stock_movements
+      ADD COLUMN invoice_id INT DEFAULT NULL AFTER document_number,
+      ADD KEY idx_stock_movements_invoice (invoice_id)
+    `);
+  } catch (_) {}
 }
 
 async function ensureDefaultSettings() {
@@ -490,7 +387,8 @@ async function ensureDefaultSettings() {
     ['tax_enabled', '0'],
     ['tax_rate', '14'],
     ['show_stock', '1'],
-    ['low_stock_alert', '5']
+    ['low_stock_alert', '5'],
+    ['return_pin', '']
   ];
 
   await db.query(
@@ -499,65 +397,16 @@ async function ensureDefaultSettings() {
   );
 }
 
-async function seedWarehouseStockFromProducts() {
-  const [[stockRowsCount]] = await db.query(
-    'SELECT COUNT(*) AS total FROM warehouse_stock'
-  );
-
-  if (stockRowsCount.total) {
-    return;
-  }
-
-  const [[warehouse]] = await db.query(
-    'SELECT id FROM warehouses WHERE active = 1 ORDER BY is_primary DESC, id ASC LIMIT 1'
-  );
-
-  if (!warehouse) return;
-
-  const [products] = await db.query(
-    'SELECT id, stock FROM products WHERE COALESCE(stock, 0) <> 0'
-  );
-
-  if (!products.length) return;
-
-  const placeholders = products.map(() => '(?, ?, ?)').join(', ');
-  const params = [];
-  for (const product of products) {
-    params.push(warehouse.id, product.id, product.stock);
-  }
-
-  await db.query(
-    `INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
-     VALUES ${placeholders}`,
-    params
-  );
-
-  console.log('ℹ️ تم ترحيل أرصدة المنتجات الحالية إلى المخزن الرئيسي');
-}
-
-async function syncProductsStockFromWarehouses() {
-  await db.query(`
-    UPDATE products p
-    LEFT JOIN (
-      SELECT product_id, COALESCE(SUM(quantity), 0) AS total_stock
-      FROM warehouse_stock
-      GROUP BY product_id
-    ) ws ON ws.product_id = p.id
-    SET p.stock = COALESCE(ws.total_stock, 0)
-  `);
-}
-
 async function ensureSchema() {
   await ensureCoreSchema();
   await ensureProductsSchema();
   await ensureProductStockPrecision();
   await ensureDefaultAdminUser();
-  await ensureWarehouseSchema();
-  await ensureDefaultWarehouse();
+  await ensureProductCategories();
+  await ensureSimpleWarehouse();
+  await ensureOtherTables();
+  await ensureStockMovementsMigration();
   await ensureDefaultSettings();
-  await ensureSalesWarehouseSetting();
-  await seedWarehouseStockFromProducts();
-  await syncProductsStockFromWarehouses();
 }
 
 module.exports = { ensureSchema };

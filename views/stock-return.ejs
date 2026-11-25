@@ -1,0 +1,160 @@
+<%- include('partials/head', { title:'إذن مرتجع لمورد', page:'stock-return', user:user }) %>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h5 class="mb-0 fw-800">إذن مرتجع لمورد</h5>
+    <small class="text-muted">تسجيل مرتجع مخزني لمورد</small>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-md-8">
+    <div class="card">
+      <div class="card-body">
+        <div class="row g-2 mb-3">
+          <div class="col-md-6">
+            <label class="form-label">اسم المورد</label>
+            <select class="form-select" id="supplierName"><option value="">-- اختر المورد --</option></select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">ملاحظات</label>
+            <input type="text" class="form-control" id="notes" placeholder="اختياري">
+          </div>
+        </div>
+
+        <div class="d-flex gap-2 mb-3">
+          <select class="form-select" id="productSelect" style="max-width:300px">
+            <option value="">-- اختر صنف --</option>
+          </select>
+          <input type="number" class="form-control" id="qty" placeholder="الكمية" style="max-width:120px" min="0" step="0.001">
+          <input type="number" class="form-control" id="price" placeholder="سعر الشراء" style="max-width:140px" min="0" step="0.01">
+          <button class="btn btn-primary" onclick="addItem()"><i class="bi bi-plus-lg"></i></button>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-bordered table-hover align-middle">
+            <thead class="table-light">
+              <tr><th>#</th><th>الصنف</th><th>الكمية</th><th>سعر الشراء</th><th>الإجمالي</th><th></th></tr>
+            </thead>
+            <tbody id="itemsBody"></tbody>
+          </table>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mt-3">
+          <div class="fw-bold">إجمالي الأصناف: <span id="totalItems">0</span></div>
+          <div class="fw-bold">الإجمالي: <span id="totalAmount">0</span> ج.م</div>
+        </div>
+
+        <button class="btn btn-warning w-100 mt-3" onclick="submitReturn()">
+          <i class="bi bi-box-arrow-up me-1"></i>تسجيل المرتجع
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-clock-history me-1"></i>آخر المرتجعات</div>
+      <div class="card-body p-0" id="recentList" style="max-height:400px;overflow-y:auto">
+        <div class="text-center text-muted small py-4">جارٍ التحميل...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const items = [];
+
+async function loadProducts() {
+  const r = await fetch('/api/products');
+  const res = await r.json();
+  const data = res.data || [];
+  const sel = document.getElementById('productSelect');
+  sel.innerHTML = '<option value="">-- اختر صنف --</option>' +
+    data.map(p => `<option value="${p.id}" data-name="${p.name}">${p.name} (${p.barcode || '-'}) [المخزون: ${p.stock ?? 0}]</option>`).join('');
+}
+
+function addItem() {
+  const sel = document.getElementById('productSelect');
+  const qty = Number(document.getElementById('qty').value);
+  const price = Number(document.getElementById('price').value);
+  if (!sel.value || qty <= 0) return toast('اختر صنف وأدخل كمية صحيحة', 'error');
+  const opt = sel.options[sel.selectedIndex];
+  items.push({ product_id: Number(sel.value), product_name: opt.dataset.name, quantity: qty, unit_price: price });
+  sel.value = ''; document.getElementById('qty').value = ''; document.getElementById('price').value = '';
+  renderItems();
+}
+
+function removeItem(i) { items.splice(i, 1); renderItems(); }
+
+function renderItems() {
+  const tbody = document.getElementById('itemsBody');
+  let totalQty = 0, totalAmt = 0;
+  tbody.innerHTML = items.map((it, i) => {
+    const total = it.quantity * it.unit_price;
+    totalQty += it.quantity; totalAmt += total;
+    return `<tr>
+      <td>${i+1}</td>
+      <td>${it.product_name}</td>
+      <td>${it.quantity}</td>
+      <td>${it.unit_price}</td>
+      <td>${total.toFixed(2)}</td>
+      <td><button class="btn btn-sm btn-outline-danger" onclick="removeItem(${i})"><i class="bi bi-x"></i></button></td>
+    </tr>`;
+  }).join('');
+  document.getElementById('totalItems').textContent = totalQty;
+  document.getElementById('totalAmount').textContent = totalAmt.toFixed(2);
+}
+
+async function submitReturn() {
+  if (!items.length) return toast('أضف صنفًا واحدًا على الأقل', 'error');
+  const r = await fetch('/api/stock/return', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      supplier_name: document.getElementById('supplierName').value.trim(),
+      notes: document.getElementById('notes').value.trim(),
+      items
+    })
+  });
+  const res = await r.json();
+  if (res.success) {
+    toast(res.message);
+    items.length = 0;
+    renderItems();
+    document.getElementById('supplierName').value = '';
+    document.getElementById('notes').value = '';
+    loadRecent();
+  } else toast(res.message, 'error');
+}
+
+async function loadRecent() {
+  const r = await fetch('/api/stock/documents');
+  const res = await r.json();
+  const data = res.data || [];
+  const list = document.getElementById('recentList');
+  const returns = data.filter(d => d.type === 'return_to_supplier').slice(0, 10);
+  if (!returns.length) {
+    list.innerHTML = '<div class="text-center text-muted small py-4">لا توجد مرتجعات سابقة</div>';
+    return;
+  }
+  list.innerHTML = returns.map(d => `
+    <div class="border-bottom p-2 small">
+      <div class="fw-bold">${d.document_number}</div>
+      <div>${d.supplier_name || 'بدون مورد'} — ${d.items.length} صنف</div>
+      <div class="text-muted" style="font-size:.7rem">${new Date(d.created_at).toLocaleString('ar-EG')}</div>
+    </div>`).join('');
+}
+
+async function loadSuppliers() {
+  const response = await fetch('/api/suppliers');
+  const result = await response.json();
+  document.getElementById('supplierName').innerHTML = '<option value="">-- اختر المورد --</option>' +
+    (result.data || []).map(s => `<option value="${String(s.name).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')}">${String(s.name).replace(/&/g, '&amp;').replace(/</g, '&lt;')}</option>`).join('');
+}
+
+loadProducts();
+loadRecent();
+loadSuppliers();
+</script>
+<%- include('partials/foot') %>
